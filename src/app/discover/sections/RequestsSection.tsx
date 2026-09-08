@@ -24,12 +24,17 @@ const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
 function Badge({ label, icon: Icon, accent }: RequestTypeBadge) {
+  // Shrinkable, with the LABEL truncating and the icon held at full size. The
+  // badge used to be `shrink-0`, which made it the last thing spilling out of a
+  // narrow card: at a 390px viewport the actions column is ~84px and this pill
+  // is ~88px, so it pushed 4px past the card no matter how the buttons wrapped.
+  // The icon carries the meaning when the text has to give way.
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-black/[0.03] px-2 py-0.5 text-[10px] font-bold ${accent}`}
+      className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-black/[0.03] px-2 py-0.5 text-[10px] font-bold ${accent}`}
     >
-      <Icon className="h-3 w-3" />
-      {label}
+      <Icon className="h-3 w-3 shrink-0" />
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -43,8 +48,13 @@ function Actions({
   onAccept: () => void;
   onDecline: () => void;
 }) {
+  // No `shrink-0` here or on the column that holds this (see Row): a shrink-0
+  // flex item is sized to max-content and never compressed, so `flex-wrap` would
+  // have no constraint to wrap against and the pair would sit at its full ~162px
+  // however narrow the card got. Being shrinkable is what lets the two buttons
+  // stack instead of spilling.
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       <button
         onClick={onDecline}
         disabled={busy}
@@ -81,14 +91,32 @@ function Row({
   onAccept: () => void;
   onDecline: () => void;
 }) {
+  // WRAPS rather than relying on a breakpoint, because no breakpoint can see
+  // what constrains this row. A `md:`/`lg:` prefix reads the VIEWPORT, while the
+  // width available here is the viewport minus the nav rail (200px expanded,
+  // 64px collapsed — a user toggle, not a media query) minus the duo's column
+  // split. At 768px `md:grid-cols-2` turns on at exactly the width where two
+  // columns stop fitting, which left a 228px row in a 193px box. Asking the real
+  // box instead of the window keeps this correct in either duo column, at any
+  // rail state.
+  //
+  // `flex-[1_1_7rem]` on the name, spelled in full rather than `flex-1 basis-28`:
+  // those two compile to `flex:1` (basis 0) plus `flex-basis:7rem` and only
+  // resolve the way we want because of the order Tailwind happens to emit them.
+  // The 7rem is the wrap threshold — avatar(44) + gap(12) + 112 = 168px is the
+  // width below which the actions column is pushed onto its own line — so it is
+  // a tuning knob, not an arbitrary size.
+  //
+  // `ml-auto` keeps the actions hard right on the line they wrap onto; at full
+  // width the name's grow already does that, so desktop is unchanged.
   return (
-    <div className="flex items-center gap-3 border-t border-black/5 py-3 first:border-t-0">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-black/5 py-3 first:border-t-0">
       {avatar}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-[1_1_7rem]">
         <div className="truncate font-bold text-ink">{name}</div>
         {note && <div className="truncate text-[12.5px] text-ink-muted">{note}</div>}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <div className="ml-auto flex min-w-0 flex-col items-end gap-1.5">
         <Badge {...requestTypeBadge(kind)} />
         <Actions busy={busy} onAccept={onAccept} onDecline={onDecline} />
       </div>
