@@ -59,12 +59,50 @@ export function InfoBox({
     if (!moreOnOverflow) return;
     const el = previewRef.current;
     if (!el) return;
-    const measure = () => setClipped(el.scrollHeight - el.clientHeight > 1);
+
+    // Measure the element that CARRIES THE CLAMP, which is never this wrapper.
+    // `previewRef` is InfoBox's own div; the caller puts `line-clamp-2` on its
+    // own <p>, and a line-clamped child clips inside itself — so the wrapper's
+    // scrollHeight always equals its clientHeight however much text is hidden.
+    //
+    // Scoped to clamped nodes rather than "anything in the subtree that
+    // overflows": a scroll container in the preview (the edit-mode textarea) is
+    // not a clamp, and counting it would offer a "More" that reveals nothing —
+    // the exact promise `moreOnOverflow` exists to keep.
+    const clampedNodes = () =>
+      Array.from(el.querySelectorAll<HTMLElement>("*")).filter(
+        (n) => getComputedStyle(n).webkitLineClamp !== "none",
+      );
+    const overflows = (n: HTMLElement) => n.scrollHeight - n.clientHeight > 1;
+    const measure = () => {
+      const clamps = clampedNodes();
+      // No clamp found: fall back to the wrapper, so a caller that clamps the
+      // preview root still behaves as before rather than silently never clipping.
+      setClipped((clamps.length ? clamps : [el]).some(overflows));
+    };
+
     measure();
+
+    // A clamped node's box does not necessarily change when its OVERFLOW does —
+    // a font swapping in after first paint changes scrollHeight while the
+    // two-line box stays the same size. So: observe size, observe content, and
+    // re-measure once the real fonts are in.
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [moreOnOverflow, preview]);
+    for (const n of clampedNodes()) ro.observe(n);
+    const mo = new MutationObserver(measure);
+    mo.observe(el, { subtree: true, childList: true, characterData: true });
+    document.fonts?.ready.then(measure).catch(() => {});
+
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+    // NOT keyed on `preview`: it is a ReactNode built inline by the caller, so a
+    // new identity every render — depending on it tore down and rebuilt both
+    // observers on every keystroke in the description editor. The MutationObserver
+    // is what notices content changes now.
+  }, [moreOnOverflow]);
 
   // Click-away collapse. Attached only while open, AFTER the opening click has
   // finished bubbling — combined with stopPropagation on the openers, the panel
@@ -108,7 +146,7 @@ export function InfoBox({
         </button>
       )}
 
-      {open && (
+      {open && hasMore && (
         <div data-testid="info-more" className="mt-2">
           {more}
           <button
