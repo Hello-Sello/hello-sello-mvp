@@ -269,15 +269,13 @@ function cleanShopName(name: string): { name: string } | { error: string } {
   return { name: trimmed };
 }
 
-/** Add a named shop for the caller's company, appended after the last one. */
-export async function createShopLocation(name: string): Promise<ManageResult> {
-  const supabase = await createClient();
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) return { error: "No company in session." };
-
-  const clean = cleanShopName(name);
-  if ("error" in clean) return clean;
-
+/** Insert a shop at the end of the company's order. The single writer of a new
+ *  shop row, so "what position does a new shop get" is answered in one place. */
+async function appendShopLocation(
+  supabase: Db,
+  companyId: string,
+  name: string,
+): Promise<{ id: string } | { error: string }> {
   const { data: last } = await supabase
     .from("shop_location")
     .select("position")
@@ -286,10 +284,30 @@ export async function createShopLocation(name: string): Promise<ManageResult> {
     .limit(1)
     .maybeSingle();
 
-  const { error } = await supabase
+  const { data: created, error } = await supabase
     .from("shop_location")
-    .insert({ company_id: companyId, name: clean.name, position: (last?.position ?? -1) + 1 });
-  if (error) return { error: shopNameError(error.message, clean.name) };
+    .insert({ company_id: companyId, name, position: (last?.position ?? -1) + 1 })
+    .select("id")
+    .single();
+  if (error || !created) {
+    return { error: shopNameError(error?.message ?? "Could not create that shop.", name) };
+  }
+  return { id: created.id };
+}
+
+/** Add a named shop for the caller's company, appended after the last one.
+ *  Deliberately strict about duplicates: a seller typing a name they already
+ *  have is a mistake worth naming, not a silent no-op. */
+export async function createShopLocation(name: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const clean = cleanShopName(name);
+  if ("error" in clean) return clean;
+
+  const appended = await appendShopLocation(supabase, companyId, clean.name);
+  if ("error" in appended) return appended;
   revalidatePath("/present");
   return { ok: true };
 }
@@ -426,7 +444,30 @@ export async function setProductLocation(
   if (!companyId) return { error: "No company in session." };
 
   const value = location?.trim() || null;
-  const { error } = await supabase.from("product").update({ location: value }).eq("id", productId);
+
+  // Callers still pass a plain shop NAME; resolving it to a row happens here, so
+  // nothing above this layer has to know a shop is a row. Assigning to a name the
+  // seller already has reuses that shop — unlike createShopLocation, a duplicate
+  // here is the normal case, not a mistake. Both columns are written while the
+  // legacy `location` label still exists (expand/contract); `location_id` is what
+  // rename and reorder actually hang off.
+  let locationId: string | null = null;
+  if (value) {
+    const { data: existing } = await supabase
+      .from("shop_location")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("name", value)
+      .maybeSingle();
+    const resolved = existing ?? (await appendShopLocation(supabase, companyId, value));
+    if ("error" in resolved) return resolved;
+    locationId = resolved.id;
+  }
+
+  const { error } = await supabase
+    .from("product")
+    .update({ location: value, location_id: locationId })
+    .eq("id", productId);
   if (error) return { error: error.message };
   revalidatePath("/present");
   return { ok: true };

@@ -46,7 +46,10 @@ export default async function CompanyProfilePage({
 
       <div className="min-h-0 flex-1">
         <BuyerShopView
-          shop={{ company: toShopCompany(company), products }}
+          // `shops` is empty by design: the seller's country-shop grouping is a
+          // filing tool for their own Manage-shop grid. A buyer sees one flat
+          // catalogue, and BuyerShopView never groups by shop.
+          shop={{ company: toShopCompany(company), products, shops: [] }}
           companyId={company.id}
           companyName={company.name}
           connectionState={company.connectionState}
