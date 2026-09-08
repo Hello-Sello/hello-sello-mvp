@@ -23,6 +23,31 @@
 
 ---
 
+## ⚠️ PENDING (2026-09-08) — `shop_location` entity, LOCAL ONLY, NOT PUSHED
+
+**One migration, applied to LOCAL only via `supabase migration up --local`. Not on cloud.**
+
+`20260908120000_shop_location_entity.sql` — new `shop_location` table (company-scoped RLS +
+`revoke all ... from anon`), `product.location_id` FK, and a backfill that creates one shop row per
+distinct existing `product.location` label and links every product to it.
+
+**Must ship WITH the app code, never after.** `getMyShop()` now selects `shop_location(name)` and
+`/present` breaks against a database that lacks the table — the same ordering mistake that took
+`/present` down for every seller on 2026-09-07 (see "🔴 READ FIRST (2026-09-07, later still)").
+
+**Verified locally before commit:** applied inside `begin … rollback` first (backfill produced 2
+shop rows, linked 6 products); negative-space RLS checked three ways — `anon` gets *permission
+denied* at the grant, an authenticated caller with no company sees 0 rows, and a cross-company
+insert with a real `company_id` raises *new row violates row-level security policy*.
+
+**Expand/contract:** this migration only ADDS. `product.location` is still present and still
+dual-written, so the old code path keeps working against the new schema — the push is safe to make
+ahead of the app code, which is the safer half of the ordering rule.
+
+**Owner:** DEV-167 asks 1 + 3, branch `claude/muskan/dev-167`. Not merged, not walked.
+
+---
+
 ## 🔴 READ FIRST (2026-09-07, later still) — `product.shelf_position` PUSHED, PRODUCTION WAS BRIEFLY BROKEN
 
 **Shipped outside the normal flow: straight from a worktree fix branch, cherry-picked onto `dev`,

@@ -2305,3 +2305,39 @@ component Sell already ships, generalized with a `side` prop) rather than forked
 **The rule this sets.** Treat BUY.md's three-block design as the eventual target, not the current
 build boundary — Buy's live surface is Orders & offers only until each further block is
 separately decided in. BUY.md's Status section is updated to match.
+
+---
+
+## 2026-09-08 — Shop locations become a real entity now (Phase-16-lite), overturning a thrice-reaffirmed deferral
+
+**Decision: a seller's "country shop" is its own row — `shop_location` (id, company_id, name,
+position) — with `product.location_id` replacing the free-text `product.location` as the grouping
+IDENTITY.** Rename is one `UPDATE` on one row; display order reuses the integer-position +
+full-list-renumber contract already used by `product_image.position`, `product_media.position` and
+`product.shelf_position`. RLS is company-scoped with an explicit `revoke ... from anon` — the table
+is seller-only, and a policy without the matching revoke leaves the PostgREST grant open (SEC-02's
+"two doors per table").
+
+**Why now, against the deferrals of 2026-06-26 and 2026-07-02 (and the Phase-7 lock that reaffirmed
+them):** every one of those deferrals rested on a cross-lane reason — *"design the address fields
+with him against what the Sales/Purchase Order docs need; do not design the schema before that"* —
+plus "solo-building the shared schema risks rework". Ayush is no longer working on this project, so
+neither holds. The blast radius was also far smaller than the phase name implied: `product.location`
+had exactly ONE consumer, `getMyShop()`, on ONE seller-only surface. No buyer view, deal document or
+order document reads it, verified by tracing every reference before deciding.
+
+**Why an entity rather than a metadata list** (the cheaper option, mirroring `metadata.locations`):
+the free-text model duplicated the shop's name across every product row, so rename was an N-row
+rewrite that could half-fail and leave two shops looking like one. One name, one owner, one write.
+
+**Still deferred, deliberately:** structured addresses, multiple addresses per location, the
+"Manage locations" form, and order-document wiring. This decision is about grouping identity only —
+a shop that can be named and re-arranged.
+
+**Expand/contract:** `product.location` is kept and dual-written by `setProductLocation`; a later
+migration drops it once nothing reads it. Sequencing matters — `getMyShop()` selects
+`shop_location(name)`, so the migration must ship with or before the app code, which is the lesson
+the 2026-09-07 `shelf_position` outage bought.
+
+*(Source: DEV-167 build session 2026-09-08 with Muskan. Supersedes the location half of the
+2026-06-26 and 2026-07-02 entries; the address half of both still stands.)*

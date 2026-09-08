@@ -36,7 +36,7 @@ import type {
 } from "@/modules/catalog";
 import {
   updateShopProfile, updateProductFields, addProductBatch, updateProductBatch,
-  softDeleteProductBatch, saveLadder, setProductShelfOrder,
+  softDeleteProductBatch, saveLadder, setProductShelfOrder, setShopLocationOrder,
 } from "@/modules/catalog/manage";
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
 import { tiersFromDraft, validateLadder } from "@/modules/catalog/ladderDraft";
@@ -249,15 +249,11 @@ export function ShopView({
   // Active location tab. "All" shows every location group; a named location
   // re-contexts the grid to that one group.
   const [loc, setLoc] = useState("All");
-  // Client-only custom order of the location sections in edit mode (drag a header
-  // to reorder). Persisting a bespoke group order is still Phase 16 (structured
-  // locations own ordering) — unlike productOrder below, this one stays ephemeral.
-  const [groupOrder, setGroupOrder] = useState<string[]>([]);
   // Product order WITHIN each shop, keyed by group label (drag a card onto a
   // sibling in the same shop to reorder). Live state while dragging; flushed to
   // `product.shelf_position` on Save (DEV-167) via setProductShelfOrder, the same
   // "own dedicated bulk action" shape as setProductImageOrder/setProductMediaOrder
-  // — so, unlike groupOrder above, this now persists.
+  // — persisted, like the shop order itself.
   const [productOrder, setProductOrder] = useState<Record<string, string[]>>({});
   // "Assign products to shop" dialog (edit mode) — the fast two-pane drag surface.
   const [assignOpen, setAssignOpen] = useState(false);
@@ -544,14 +540,13 @@ export function ShopView({
   // The location groups to render for the active tab (already square + 4-up
   // inside each LocationGroup). Grouping is pure — see ./locationFilter.
   const visibleGroups = groupByLocation(filterByLocation(products, loc));
-  const groupOrdered =
-    groupOrder.length === 0
-      ? visibleGroups
-      : [...visibleGroups].sort(
-          (a, b) =>
-            (groupOrder.indexOf(a.location) + 1 || 999) -
-            (groupOrder.indexOf(b.location) + 1 || 999),
-        );
+  // Sections render in the seller's saved shop order (shop_location.position),
+  // set either here by dragging a header or in the Assign-products dialog. A
+  // label with no shop row — UNASSIGNED, or a staged one — sorts to the end.
+  const shopRank = new Map(shop.shops.map((s, i) => [s.name, i] as const));
+  const groupOrdered = [...visibleGroups].sort(
+    (a, b) => (shopRank.get(a.location) ?? 999) - (shopRank.get(b.location) ?? 999),
+  );
   // Then apply the in-shop card order (client-only reorder). Groups with no saved
   // order keep the default name order from the query.
   const orderedGroups = applyProductOrder(groupOrdered, productOrder);
@@ -569,13 +564,20 @@ export function ShopView({
     : [];
   const renderGroups = [...orderedGroups, ...pendingGroups];
 
-  function reorderGroups(from: string, to: string) {
-    const current = orderedGroups.map((g) => g.location);
-    const fromIdx = current.indexOf(from);
-    const toIdx = current.indexOf(to);
-    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
-    current.splice(toIdx, 0, current.splice(fromIdx, 1)[0]);
-    setGroupOrder(current);
+  /** Drag a section header to re-arrange shops. Writes `shop_location.position`
+   *  through the same action the Assign-products dialog uses — one authoritative
+   *  writer, so the two surfaces can never disagree about the order. Sections
+   *  without a shop row cannot be moved; there is nothing to persist. */
+  async function reorderGroups(from: string, to: string) {
+    const ids = shop.shops.map((s) => s.id);
+    const fromId = shop.shops.find((s) => s.name === from)?.id;
+    const toId = shop.shops.find((s) => s.name === to)?.id;
+    if (!fromId || !toId) return;
+    const next = moveRelative(ids, fromId, toId, "before");
+    if (next === ids) return;
+    const res = await setShopLocationOrder(next);
+    if ("error" in res) { setError(res.error); return; }
+    router.refresh();
   }
 
   // Reorder a card within its shop: place `draggedId` on the given `position` side
@@ -806,8 +808,8 @@ export function ShopView({
         open={assignOpen}
         onClose={() => setAssignOpen(false)}
         products={products}
+        shops={shop.shops}
         stagedLocations={pendingLocations}
-        onAddLocation={addLocation}
         onChanged={() => router.refresh()}
       />
     </>
