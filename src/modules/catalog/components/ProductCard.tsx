@@ -26,7 +26,7 @@ import {
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
   MessageSquareQuote, Check,
 } from "lucide-react";
-import { ImageLightbox } from "./ImageLightbox";
+import { ImageHoverPreview } from "./ImageHoverPreview";
 import type { ShopProduct } from "../shop";
 import { packSizes, resolveTierPrice } from "../pricing";
 import { ladderRows } from "../ladderPanel";
@@ -280,11 +280,17 @@ export function ProductCard({
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Measured at the moment it opens, never during render — reading a ref
+  // while rendering is unsound (the DOM may not match the render yet).
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   // Hover-zoom timers. Opening is delayed so sweeping the mouse across the grid
   // does not strobe a full-size photo for every card it crosses; closing is
   // delayed so the pointer can cross the gap from the card to the enlarged photo
   // without it vanishing on the way (WCAG 1.4.13 "hoverable"). Neither timer
   // ever closes an OPEN preview on its own — that would break "persistent".
+  // The photo frame, measured when the preview opens so the panel can sit
+  // flush against it rather than in the middle of the screen.
+  const photoRef = useRef<HTMLDivElement | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -295,7 +301,16 @@ export function ProductCard({
   function zoomIn() {
     if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
     if (lightboxOpen || openTimer.current) return;
-    openTimer.current = setTimeout(() => { openTimer.current = null; setLightboxOpen(true); }, 350);
+    openTimer.current = setTimeout(() => {
+      openTimer.current = null;
+      setAnchorRect(photoRef.current?.getBoundingClientRect() ?? null);
+      setLightboxOpen(true);
+    }, 350);
+  }
+  /** Open immediately (click / Enter), measuring the frame first. */
+  function openNow() {
+    setAnchorRect(photoRef.current?.getBoundingClientRect() ?? null);
+    setLightboxOpen(true);
   }
   function zoomOut() {
     if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
@@ -507,19 +522,21 @@ export function ProductCard({
               spec rows below — without the cap the square image swallows the card
               and the spec list collapses to ~0px (object-cover crops the overflow). */}
           {lightboxOpen && cover && (
-            <ImageLightbox
+            <ImageHoverPreview
               src={cover}
               alt={p.cultivar ?? p.name}
               count={images.length}
               position={idx + 1}
+              anchor={anchorRect}
               onPrev={() => setImgIdx((i) => i - 1)}
               onNext={() => setImgIdx((i) => i + 1)}
               onClose={() => { cancelTimers(); setLightboxOpen(false); }}
-              onPointerEnterImage={zoomIn}
-              onPointerLeaveImage={zoomOut}
+              onPointerEnter={zoomIn}
+              onPointerLeave={zoomOut}
             />
           )}
           <div
+            ref={photoRef}
             data-testid="card-photo"
             className={`relative aspect-square max-h-[250px] w-full shrink-0 overflow-hidden bg-brand-soft/40 ${
               cover && !editing ? "cursor-zoom-in" : ""
@@ -537,12 +554,12 @@ export function ProductCard({
                   onMouseLeave: zoomOut,
                   onFocus: zoomIn,
                   onBlur: zoomOut,
-                  onClick: () => { cancelTimers(); setLightboxOpen(true); },
+                  onClick: () => { cancelTimers(); openNow(); },
                   onKeyDown: (e: React.KeyboardEvent) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       cancelTimers();
-                      setLightboxOpen(true);
+                      openNow();
                     }
                   },
                 }

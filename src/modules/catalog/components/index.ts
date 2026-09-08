@@ -8,4 +8,4 @@ export type {
 export { PackSizeSelector } from "./PackSizeSelector";
 export { LocationGroup } from "./LocationGroup";
 export { MediaManager } from "./MediaManager";
-export { ImageLightbox } from "./ImageLightbox";
+export { ImageHoverPreview } from "./ImageHoverPreview";
