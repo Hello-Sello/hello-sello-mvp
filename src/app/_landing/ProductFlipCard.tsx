@@ -16,7 +16,8 @@ import {
  * The card's own metrics stay at 350x548, where its type scale was tuned.
  *
  * The product, batch, numbers, and documents are ILLUSTRATIVE / FICTIONAL
- * (D-06 stand-in).
+ * (D-06 stand-in). The card is aria-hidden decoration, so its titles are <p>,
+ * not headings: the page's only <h3>s are the three step titles (e2e).
  */
 
 const POTENCY: [string, string][] = [
@@ -74,9 +75,9 @@ export function ProductFlipCard({ scale = 1 }: { scale?: number }) {
             <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="truncate text-lg font-extrabold leading-tight text-brand-deep">
+                  <p className="truncate text-lg font-extrabold leading-tight text-brand-deep">
                     Northern Lights
-                  </h3>
+                  </p>
                   <p className="truncate text-xs text-ink-muted">Canadian Craft · Batch NL-2409</p>
                 </div>
                 <span className="shrink-0 text-lg leading-none">🇨🇦</span>
@@ -140,7 +141,7 @@ export function ProductFlipCard({ scale = 1 }: { scale?: number }) {
                 <FlaskConical size={17} />
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-ink">Documents &amp; lab results</h3>
+                <p className="text-sm font-bold text-ink">Documents &amp; lab results</p>
                 <p className="truncate text-xs text-ink-muted">Northern Lights · Batch NL-2409</p>
               </div>
             </div>

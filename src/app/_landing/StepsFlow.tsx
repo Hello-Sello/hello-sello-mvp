@@ -28,11 +28,13 @@ const MESSAGES = [
   { who: "lena", text: "Deal, lock it in 🤝" },
 ] as const;
 
+// Short names on purpose: the panel is ~170px wide at 1366px, so a long
+// company name would truncate mid-word.
 const CONTACTS = [
-  { initials: "GL", name: "Greenleaf Pharmacy", where: "Berlin" },
-  { initials: "SP", name: "StonePharm Wholesale", where: "Hamburg" },
-  { initials: "CC", name: "Canadian Craft", where: "Grower" },
-  { initials: "AP", name: "Apoteca", where: "München" },
+  { initials: "GL", name: "Greenleaf", where: "Pharmacy · Berlin" },
+  { initials: "SP", name: "StonePharm", where: "Wholesale · Hamburg" },
+  { initials: "CC", name: "Canadian Craft", where: "Grower · Canada" },
+  { initials: "AP", name: "Apoteca", where: "Pharmacy · München" },
 ];
 
 export function StepsFlow() {
