@@ -4,7 +4,7 @@ import { CTAButton } from "./CTAButton";
 /**
  * Hero (one-screen landing, left column). Holds the ONLY <h1> on the page
  * (the e2e h1 contract), line 2 as the first <p> after it (the e2e subhead
- * contract), the audience paragraph, a three-item trust line, and the single
+ * contract), a three-item trust line, and the single
  * primary "Request access" CTA -> /signup (D-02) with the verified-only line
  * under it. No secondary in-page link: there is nothing below to scroll to.
  *
@@ -23,10 +23,6 @@ export function Hero() {
 
       <p className="lp-display mt-5 max-w-[24ch] text-[1.3rem] font-semibold leading-snug tracking-[-0.015em] text-ink sm:text-2xl">
         Close hundreds of B2B deals in one secured Chat
-      </p>
-
-      <p className="mt-4 max-w-[46ch] text-[15px] leading-relaxed text-ink-muted">
-        {"If you're a medical cannabis supplier, grower, pharmacy or wholesaler, this system is built for you. Private chats and confidential deals with your entire network. Buy and sell all products to all partners."}
       </p>
 
       <ul className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium text-ink">

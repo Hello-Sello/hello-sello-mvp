@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Check, Lock } from "lucide-react";
+import { Check } from "lucide-react";
 import { ProductFlipCard } from "./ProductFlipCard";
 import { LENA_AVA_SVG, MARCO_AVA_SVG } from "./heroAvatars";
 
@@ -137,9 +137,6 @@ function ChatPreview() {
           </div>
         );
       })}
-      <p className="mt-1 flex items-center justify-center gap-1 text-[10px] font-medium text-white/45">
-        <Lock size={10} aria-hidden /> Encrypted, only the two of you
-      </p>
     </div>
   );
 }
