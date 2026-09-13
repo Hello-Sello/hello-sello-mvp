@@ -1,8 +1,8 @@
 /**
  * Discover E2E (Lane B, Variant D) — the reworked LinkedIn-style Discover page.
  *
- * Behavior under test: /discover renders the Variant D layout — an ads-leaderboard
- * PLACEHOLDER, the Requests | My Network duo SIDE BY SIDE (equal-height boxes), a
+ * Behavior under test: /discover renders the Variant D layout — a sponsored
+ * banner, the Requests | My Network duo SIDE BY SIDE (equal-height boxes), a
  * "People you may know" card grid, and the Companies directory whose Company-type
  * filter is a multi-select DROPDOWN (not pills). This is the permanent capture of
  * the manual "live-browser pass" the unit tests can't do — those render via
@@ -40,8 +40,10 @@ test("Discover renders every Variant D section", async ({ page }) => {
   await signIn(page);
   await page.goto("/discover");
 
-  // Ads = a leaderboard PLACEHOLDER (no fake creatives).
-  await expect(page.getByText("Your ad could be here")).toBeVisible();
+  // Ads = the sponsored leaderboard, carrying one creative.
+  const ad = page.getByRole("region", { name: "Sponsored" });
+  await expect(ad).toBeVisible();
+  await expect(ad.getByRole("img", { name: /Superseed Grape Cookies/ })).toBeVisible();
 
   // The duo + the two full-width sections are all present.
   await expect(page.getByRole("heading", { level: 2, name: "Requests" })).toBeVisible();
