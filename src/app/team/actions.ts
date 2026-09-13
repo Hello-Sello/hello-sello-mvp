@@ -6,6 +6,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/shared/db/server'
 import { createAdminClient } from '@/shared/db/admin'
 import { getCurrentCompanyId } from '@/shared/auth'
+import { APP_LANDING } from '@/shared/ui/surfaces'
 import { shouldDispatch } from '@/shared/email/dispatch'
 
 /**
@@ -107,7 +108,7 @@ export async function inviteMember(email: string, role: Role): Promise<ActionRes
   const admin = createAdminClient()
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { company_id: companyId, role },
-    redirectTo: `${origin}/auth/confirm?type=invite&next=/home`,
+    redirectTo: `${origin}/auth/confirm?type=invite&next=${APP_LANDING}`,
   })
   if (inviteError) {
     // D-09: an existing account makes inviteUserByEmail return "User already registered".

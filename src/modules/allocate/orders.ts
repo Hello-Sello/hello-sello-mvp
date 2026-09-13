@@ -1,13 +1,16 @@
 /**
  * Allocate — Orders & offers, REAL Supabase read (Task 1, 260707-0ob plan 2).
+ * `getBuyerOrders()` is the Buy-surface twin, added when Buy adopted the same
+ * table — same shape, narrowed to the caller-as-buyer side instead.
  *
- * Seller-scoped: `getSellerOrders()` returns every `deal_card` where the
- * CALLER's own company is the derived seller (`sellerCompanyId`, the single
- * owner of that rule in `@/modules/deals`) — never a row where the caller is
- * the buyer. RLS (`deal_card`/`relationship` membership on either side)
- * already scopes the base read to relationship members; this narrows further
- * to seller-only, matching Allocate's "no buyer analytics" lock (SELL.md) and
- * mitigating T-260707-04.
+ * Role-scoped: `getSellerOrders()` returns every `deal_card` where the
+ * CALLER's own company is the derived seller, `getBuyerOrders()` where it's
+ * the derived buyer (`sellerCompanyId`/`buyerCompanyId`, the single owner of
+ * that rule in `@/modules/deals`) — never a row from the other side. RLS
+ * (`deal_card`/`relationship` membership on either side) already scopes the
+ * base read to relationship members; both narrow further to one role each,
+ * reusing `narrowByRole` from `./calendarDeals` (the same T-260707-04-class
+ * mitigation, generalized there when Buy's calendar got its own twin).
  *
  * Async, cookie-scoped `createClient` from `@/shared/db/server` — this is
  * called from an async Server Component page (Plan 4), not a client
@@ -18,14 +21,18 @@
  */
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
-import { sellerCompanyId, type DealType, type DealCardStatus } from "@/modules/deals";
+import { sellerCompanyId, buyerCompanyId, type DealType, type DealCardStatus } from "@/modules/deals";
 import { statusOf, orderNumberOf, formatOrderDate, type OrderStatus, type TicketStatus } from "./status";
+import { narrowByRole } from "./calendarDeals";
 
-/** One row of the seller's Orders & offers table (Task 1 artifact contract). */
-export interface SellerOrderRow {
+/** One row of the Orders & offers table — shared by Sell (seller's view of
+ *  each buyer) and Buy (buyer's view of each supplier). `counterparty` names
+ *  whoever is on the OTHER side of the deal from the caller, mirroring how
+ *  `CalendarDeal` already generalizes this for the shared deal calendar. */
+export interface OrderRow {
   id: string;
   orderNumber: string;
-  customerName: string;
+  counterparty: { id: string; name: string };
   /** DD-Mon-YY, already formatted (formatOrderDate) — the received date is
    *  deal_card.created_at. */
   receivedAt: string;
@@ -36,7 +43,6 @@ export interface SellerOrderRow {
   status: OrderStatus;
   valueNet: number | null;
   currency: string;
-  buyerCompanyId: string;
 }
 
 /**
@@ -65,7 +71,7 @@ function sequenceByCardId(cards: { id: string; created_at: string }[]): Map<stri
   return seqByCard;
 }
 
-export async function getSellerOrders(): Promise<SellerOrderRow[]> {
+export async function getSellerOrders(): Promise<OrderRow[]> {
   const callerCompanyId = await getCurrentCompanyId();
   if (!callerCompanyId) return [];
 
@@ -93,16 +99,7 @@ export async function getSellerOrders(): Promise<SellerOrderRow[]> {
   // T-260707-04 mitigation: keep ONLY rows where the caller is the derived
   // seller — never a row where the caller is the buyer, even though RLS
   // already returns both sides of the relationship.
-  const sellerCards = cardRows.filter((c) => {
-    const rel = relById.get(c.relationship_id);
-    if (!rel) return false;
-    const seller = sellerCompanyId(
-      { deal_type: c.deal_type as DealType, initiating_company_id: c.initiating_company_id },
-      rel.company_a_id,
-      rel.company_b_id,
-    );
-    return seller === callerCompanyId;
-  });
+  const sellerCards = narrowByRole(cardRows, relById, callerCompanyId, sellerCompanyId);
   if (sellerCards.length === 0) return [];
 
   const companyIds = Array.from(
@@ -140,17 +137,17 @@ export async function getSellerOrders(): Promise<SellerOrderRow[]> {
 
   return sellerCards.map((c) => {
     const rel = relById.get(c.relationship_id)!;
-    const buyerCompanyId = rel.company_a_id === callerCompanyId ? rel.company_b_id : rel.company_a_id;
-    const buyerName = nameById.get(buyerCompanyId) ?? "Unknown company";
+    const buyerId = rel.company_a_id === callerCompanyId ? rel.company_b_id : rel.company_a_id;
+    const buyerName = nameById.get(buyerId) ?? "Unknown company";
 
     return {
       id: c.id,
       orderNumber: orderNumberOf(sellerName, buyerName, c.created_at, seqByCard.get(c.id) ?? 1),
-      customerName: buyerName,
+      counterparty: { id: buyerId, name: buyerName },
       receivedAt: formatOrderDate(c.created_at),
       deliveryAt: c.delivery_date_target ? formatOrderDate(c.delivery_date_target) : null,
       skuCount: skuCountByCard.get(c.id) ?? 0,
-      orderedVia: c.ordered_via as SellerOrderRow["orderedVia"],
+      orderedVia: c.ordered_via as OrderRow["orderedVia"],
       status: statusOf({
         status: c.status as DealCardStatus,
         dealType: c.deal_type as DealType,
@@ -158,7 +155,100 @@ export async function getSellerOrders(): Promise<SellerOrderRow[]> {
       }),
       valueNet: c.value_net,
       currency: c.currency,
-      buyerCompanyId,
+    };
+  });
+}
+
+/**
+ * The Buy-surface twin of `getSellerOrders()` — identical shape and fetch
+ * discipline, narrowed to rows where the caller is the derived BUYER instead
+ * (same T-260707-04-class mitigation as `getBuyerCalendarDeals()`). Buy's
+ * MVP page renders these through the same `OrdersTable` component, `side="buyer"`.
+ */
+export async function getBuyerOrders(): Promise<OrderRow[]> {
+  const callerCompanyId = await getCurrentCompanyId();
+  if (!callerCompanyId) return [];
+
+  const supabase = await createClient();
+
+  const { data: cards, error: cardsErr } = await supabase
+    .from("deal_card")
+    .select(
+      "id, relationship_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, ordered_via, ticket_status, created_at",
+    )
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (cardsErr) throw cardsErr;
+  const cardRows = cards ?? [];
+  if (cardRows.length === 0) return [];
+
+  const relationshipIds = Array.from(new Set(cardRows.map((c) => c.relationship_id)));
+  const { data: relationships, error: relErr } = await supabase
+    .from("relationship")
+    .select("id, company_a_id, company_b_id")
+    .in("id", relationshipIds);
+  if (relErr) throw relErr;
+  const relById = new Map((relationships ?? []).map((r) => [r.id, r] as const));
+
+  // Buyer-only narrowing: keep ONLY rows where the caller is the derived
+  // buyer — never a row where the caller is the seller, even though RLS
+  // already returns both sides of the relationship.
+  const buyerCards = narrowByRole(cardRows, relById, callerCompanyId, buyerCompanyId);
+  if (buyerCards.length === 0) return [];
+
+  const companyIds = Array.from(
+    new Set(
+      buyerCards.flatMap((c) => {
+        const rel = relById.get(c.relationship_id)!;
+        return [rel.company_a_id, rel.company_b_id];
+      }),
+    ),
+  );
+  const { data: companies, error: coErr } = await supabase
+    .from("company")
+    .select("id, name")
+    .in("id", companyIds);
+  if (coErr) throw coErr;
+  const nameById = new Map((companies ?? []).map((c) => [c.id, c.name] as const));
+
+  // current-version-only SKU count per card (mirrors getDealCard's
+  // `.eq("version", card.version)` line-item filter, batched across cards).
+  const cardIds = buyerCards.map((c) => c.id);
+  const { data: lineRows, error: lineErr } = await supabase
+    .from("deal_line_item")
+    .select("deal_card_id, version")
+    .in("deal_card_id", cardIds);
+  if (lineErr) throw lineErr;
+  const versionByCard = new Map(buyerCards.map((c) => [c.id, c.version] as const));
+  const skuCountByCard = new Map<string, number>();
+  for (const l of lineRows ?? []) {
+    if (l.version !== versionByCard.get(l.deal_card_id)) continue;
+    skuCountByCard.set(l.deal_card_id, (skuCountByCard.get(l.deal_card_id) ?? 0) + 1);
+  }
+
+  const seqByCard = sequenceByCardId(buyerCards);
+  const buyerName = nameById.get(callerCompanyId) ?? "Unknown company";
+
+  return buyerCards.map((c) => {
+    const rel = relById.get(c.relationship_id)!;
+    const sellerId = rel.company_a_id === callerCompanyId ? rel.company_b_id : rel.company_a_id;
+    const sellerName = nameById.get(sellerId) ?? "Unknown company";
+
+    return {
+      id: c.id,
+      orderNumber: orderNumberOf(sellerName, buyerName, c.created_at, seqByCard.get(c.id) ?? 1),
+      counterparty: { id: sellerId, name: sellerName },
+      receivedAt: formatOrderDate(c.created_at),
+      deliveryAt: c.delivery_date_target ? formatOrderDate(c.delivery_date_target) : null,
+      skuCount: skuCountByCard.get(c.id) ?? 0,
+      orderedVia: c.ordered_via as OrderRow["orderedVia"],
+      status: statusOf({
+        status: c.status as DealCardStatus,
+        dealType: c.deal_type as DealType,
+        ticketStatus: (c.ticket_status ?? null) as TicketStatus,
+      }),
+      valueNet: c.value_net,
+      currency: c.currency,
     };
   });
 }

@@ -1,7 +1,7 @@
 import { Reveal } from "./Reveal";
 
 /**
- * B2B-only band (§8, LAND-02). The page's signature full-bleed gradient band:
+ * B2B-only band (§8, LAND-02). The page's signature gradient band:
  * white type on raspberry. Renders the load-bearing German substring
  * `nicht an Verbraucher` VERBATIM — the phrase that preserves the BFSG
  * B2B-exemption — with English framing per D-09. The German string is exact and

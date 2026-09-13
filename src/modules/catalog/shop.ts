@@ -139,7 +139,14 @@ export type Shop = {
     tags: string[];
   };
   products: ShopProduct[];
+  /** The seller's named country shops, in their chosen display order. Distinct
+   *  from `company.locations` above, which is the warehouse address list — a
+   *  shop is how the seller FILES products; a warehouse is where stock sits. */
+  shops: ShopLocation[];
 };
+
+/** One named shop, the unit the seller renames and re-arranges. */
+export type ShopLocation = { id: string; name: string; position: number };
 
 /** Pull the links array out of the company's jsonb metadata, tolerating any
  *  legacy/foreign shape (returns [] rather than throwing on unexpected data). */
@@ -200,7 +207,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, visibility_start, visibility_end, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent))",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, location_id, shop_location(name), pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, visibility_start, visibility_end, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent))",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -264,7 +271,10 @@ export async function getMyShop(): Promise<Shop | null> {
       supplier_product_code: r.supplier_product_code,
       packaging_material: r.packaging_material,
       resealable: r.resealable,
-      location: r.location,
+      // The shop's name now lives on ONE row, so a rename shows up here for
+      // every product at once. `location` is the legacy label, kept only as a
+      // fallback until the expand/contract drops it.
+      location: r.shop_location?.name ?? r.location,
       pack_size_grams: r.pack_size_grams,
       unit_code: r.unit_code,
       local_code_pzn: r.local_code_pzn,
@@ -290,6 +300,13 @@ export async function getMyShop(): Promise<Shop | null> {
     };
   });
 
+  const { data: shopRows } = await supabase
+    .from("shop_location")
+    .select("id, name, position")
+    .eq("company_id", companyId)
+    .order("position")
+    .order("name");
+
   return {
     company: {
       id: company.id,
@@ -308,5 +325,6 @@ export async function getMyShop(): Promise<Shop | null> {
       tags: (company.company_type_assignment ?? []).map((t) => t.company_type_code),
     },
     products,
+    shops: (shopRows ?? []).map((r) => ({ id: r.id, name: r.name, position: r.position })),
   };
 }

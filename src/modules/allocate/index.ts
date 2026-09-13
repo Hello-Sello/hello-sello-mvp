@@ -7,8 +7,9 @@
  * derivation; Plan 3 built the Batches read/write side; this plan (4) is the
  * first point where both need a single shared barrel, so it finishes it here.
  */
-export type { SellerOrderRow } from "./orders";
-export { getSellerOrders } from "./orders";
+export type { OrderRow } from "./orders";
+export { getSellerOrders, getBuyerOrders } from "./orders";
+export { OrdersTable } from "./components/OrdersTable";
 
 export type { OrderStatus, OrderStatusCode, TicketStatus } from "./status";
 export { statusOf, orderNumberOf, formatOrderDate, isKeyAccount } from "./status";

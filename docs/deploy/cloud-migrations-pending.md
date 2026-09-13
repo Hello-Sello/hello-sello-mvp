@@ -23,6 +23,57 @@
 
 ---
 
+## ⚠️ PENDING (2026-09-08) — `shop_location` entity — ~~LOCAL ONLY, NOT PUSHED~~ **CONFIRMED LIVE on cloud, verified 2026-09-08** (`to_regclass('public.shop_location')` resolves against `byipusuthdlskdxoexkt`)
+
+**~~One migration, applied to LOCAL only via `supabase migration up --local`. Not on cloud.~~ Now on cloud too — table confirmed present via live query, session 105.**
+
+`20260908120000_shop_location_entity.sql` — new `shop_location` table (company-scoped RLS +
+`revoke all ... from anon`), `product.location_id` FK, and a backfill that creates one shop row per
+distinct existing `product.location` label and links every product to it.
+
+**Must ship WITH the app code, never after.** `getMyShop()` now selects `shop_location(name)` and
+`/present` breaks against a database that lacks the table — the same ordering mistake that took
+`/present` down for every seller on 2026-09-07 (see "🔴 READ FIRST (2026-09-07, later still)").
+
+**Verified locally before commit:** applied inside `begin … rollback` first (backfill produced 2
+shop rows, linked 6 products); negative-space RLS checked three ways — `anon` gets *permission
+denied* at the grant, an authenticated caller with no company sees 0 rows, and a cross-company
+insert with a real `company_id` raises *new row violates row-level security policy*.
+
+**Expand/contract:** this migration only ADDS. `product.location` is still present and still
+dual-written, so the old code path keeps working against the new schema — the push is safe to make
+ahead of the app code, which is the safer half of the ordering rule.
+
+**Owner:** DEV-167 asks 1 + 3, branch `claude/muskan/dev-167`. Not merged, not walked.
+
+---
+
+## 🔴 READ FIRST (2026-09-07, later still) — `product.shelf_position` PUSHED, PRODUCTION WAS BRIEFLY BROKEN
+
+**Shipped outside the normal flow: straight from a worktree fix branch, cherry-picked onto `dev`,
+PR #189 `dev → main`, merged by Muskan.** Not through `claude/muskan/work` — that branch had an
+unrelated backlog (0028 build in progress) that would have delayed this fix, and DEV-167 (Manage
+Shop product order) was small and fully self-contained, so it shipped directly.
+
+**Real incident, not a hypothetical.** Vercel auto-deployed the `main` merge commit
+(`010d996`, 2026-09-07 17:15 UTC) before the migration was applied — `getMyShop()`'s query
+(`.order("shelf_position")...`) went live referencing a column that did not exist on production
+yet, breaking `/present` for every seller until the push below landed. Caught and fixed within
+minutes of the merge, not by design — **the lesson: same-deploy sequencing (migration before or
+with the code, never after) applies even to a fix shipped outside `claude/muskan/work`.**
+
+**Pushed via `supabase db push --linked` (project `byipusuthdlskdxoexkt`)**, one migration:
+`20260907150000_product_shelf_position.sql` — `alter table product add column shelf_position
+smallint not null default 0`. Verified via `supabase migration list --linked` before (only this
+one pending, tip was `20260907140000`, matching the ledger) and via direct `execute_sql` after
+(`shelf_position | smallint | 0` present). Security advisors checked post-push — no new finding
+tied to `shelf_position` or the `product` table.
+
+**Non-migration deploy debt this does NOT resolve:** none — this fix has no edge functions, no
+secrets, nothing beyond the one column.
+
+---
+
 ## 🔴 READ FIRST (2026-09-07, later same day) — TWO MORE MIGRATIONS PUSHED, `/ship 0027` in progress
 
 **Both now-pending migrations are LIVE ON PRODUCTION**, applied via two individual

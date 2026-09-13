@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 // erase-expired-accounts (Phase 13 SET-02, async half): the day-30 GDPR erasure

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/shared/auth";
+import { APP_LANDING } from "@/shared/ui/surfaces";
 import { LandingNav } from "./_landing/LandingNav";
 import { Hero } from "./_landing/Hero";
 import { TrustedBy } from "./_landing/TrustedBy";
 import { SocialProof } from "./_landing/SocialProof";
+import { DataProtection } from "./_landing/DataProtection";
 import { ProductFlipCard } from "./_landing/ProductFlipCard";
 import { ValueProps } from "./_landing/ValueProps";
 import { HowItWorks } from "./_landing/HowItWorks";
@@ -23,19 +25,19 @@ import { CookieBanner } from "./_landing/CookieBanner";
 export const metadata: Metadata = {
   title: "Hello Sello - B2B pharma trade, connected",
   description:
-    "Hello Sello is the B2B marketplace for verified companies. Discover trusted partners, connect safely with no cross-company leaks, and turn conversations into documented deals.",
+    "One secure space for every B2B deal. Verified buyers and sellers create offers and orders, send them to every partner, and trade in encrypted chat hosted in Germany.",
 };
 
 /**
  * Root route. The public front door (D-01): a logged-out visitor lands on the
  * marketing page; a signed-in visitor is redirected into the app. The session
  * check is a page-level read (getCurrentUser — JWT-revalidated), NOT proxy logic
- * (B7 lock — proxy stays thin, no DB lookups). Redirect target is /home, which
- * already handles every verification / no-company state safely.
+ * (B7 lock — proxy stays thin, no DB lookups). Redirect target is APP_LANDING,
+ * whose surface gate routes every verification / no-company state on safely.
  */
 export default async function RootPage() {
   const user = await getCurrentUser();
-  if (user) redirect("/home");
+  if (user) redirect(APP_LANDING);
 
   return (
     <div className="min-h-screen">
@@ -75,6 +77,8 @@ export default async function RootPage() {
         {/* §7 social proof — testimonials + metrics (illustrative / fictional
             stand-in until real proof exists; see SocialProof). */}
         <SocialProof />
+
+        <DataProtection />
 
         <B2BOnlyBand />
         <FAQ />

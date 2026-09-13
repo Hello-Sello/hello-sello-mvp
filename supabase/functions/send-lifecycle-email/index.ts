@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { renderTemplate, type LifecycleEvent } from "../_shared/email/templates.ts";
 import { sendViaResend } from "../_shared/email/resend.ts";
