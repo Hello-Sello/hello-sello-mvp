@@ -36,7 +36,7 @@ export function CTAButton({
   return (
     <a
       href={href}
-      className={`inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-200 ${sizeCls} ${variantCls} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand ${sizeCls} ${variantCls} ${className}`}
     >
       {children}
       {withArrow && <ArrowRight size={size === "lg" ? 18 : 16} />}
