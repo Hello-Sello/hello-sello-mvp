@@ -1,30 +1,22 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/shared/auth";
+import { AuroraBackground } from "./_landing/AuroraBackground";
+import { Ticker } from "./_landing/Ticker";
 import { LandingNav } from "./_landing/LandingNav";
 import { Hero } from "./_landing/Hero";
-import { TrustedBy } from "./_landing/TrustedBy";
-import { SocialProof } from "./_landing/SocialProof";
-import { DataProtection } from "./_landing/DataProtection";
-import { ProductFlipCard } from "./_landing/ProductFlipCard";
-import { ValueProps } from "./_landing/ValueProps";
-import { HowItWorks } from "./_landing/HowItWorks";
-import { B2BOnlyBand } from "./_landing/B2BOnlyBand";
-import { FAQ } from "./_landing/FAQ";
-import { FinalCTA } from "./_landing/FinalCTA";
-import { Footer } from "./_landing/Footer";
-import { SectionHeading } from "./_landing/SectionHeading";
-import { Reveal } from "./_landing/Reveal";
+import { StepsFlow } from "./_landing/StepsFlow";
+import { LandingFooterBar } from "./_landing/LandingFooterBar";
 import { CookieBanner } from "./_landing/CookieBanner";
 
 // Server component (required for both `export const metadata` and `redirect()`).
 // Do NOT mark this "use client" — that breaks the metadata export AND the D-01
 // redirect. Interactivity lives in child "use client" components (LandingNav,
-// Reveal).
+// CookieBanner).
 export const metadata: Metadata = {
-  title: "Hello Sello - B2B pharma trade, connected",
+  title: "Hello Sello - Safer bigger deals",
   description:
-    "One secure space for every B2B deal. Verified buyers and sellers create offers and orders, send them to every partner, and trade in encrypted chat hosted in Germany.",
+    "Close hundreds of B2B deals in one secured chat. Built for medical cannabis suppliers, growers, pharmacies and wholesalers: private chats and confidential deals with your entire network, GDPR compliant and hosted in Germany.",
 };
 
 /**
@@ -33,57 +25,28 @@ export const metadata: Metadata = {
  * check is a page-level read (getCurrentUser — JWT-revalidated), NOT proxy logic
  * (B7 lock — proxy stays thin, no DB lookups). Redirect target is /home, which
  * already handles every verification / no-company state safely.
+ *
+ * ONE SCREEN (2026-09-13 redesign): on desktop the whole page is a single
+ * viewport - ticker, nav, hero copy (left) + the three-step story (right),
+ * one-line legal footer - and does not scroll. The e2e case proves the fit
+ * with toBeInViewport at 1366x768 and 1440x900; `lg:h-dvh` + `overflow-hidden`
+ * then guarantee no scrollbar. Below `lg` the columns stack and the page
+ * scrolls normally (a phone cannot hold this in one screen).
  */
 export default async function RootPage() {
   const user = await getCurrentUser();
   if (user) redirect("/home");
 
   return (
-    <div className="min-h-screen">
+    <div className="relative isolate flex min-h-dvh flex-col overflow-hidden lg:h-dvh">
+      <AuroraBackground />
+      <Ticker />
       <LandingNav />
-      <main>
+      <main className="mx-auto grid w-full max-w-7xl flex-1 items-center gap-10 px-6 py-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12 lg:py-4">
         <Hero />
-
-        {/* §3 logo bar — illustrative partner logos (dummy medical companies)
-            standing in until real partner logos exist (see TrustedBy). */}
-        <section className="mx-auto max-w-6xl px-6 py-10">
-          <Reveal>
-            <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
-              Trusted by teams across pharma
-            </p>
-            <div className="mt-6">
-              <TrustedBy />
-            </div>
-          </Reveal>
-        </section>
-
-        <ValueProps />
-        <HowItWorks />
-
-        {/* §6 product preview — a real product card (front/back flip). The
-            listing is illustrative (see ProductFlipCard). */}
-        <section className="mx-auto max-w-5xl px-6 py-20">
-          <SectionHeading
-            eyebrow="See it in action"
-            title="A gated product, here's the inside"
-            sub="You can't try it without verification, so here's a look at what's behind the gate."
-          />
-          <Reveal className="mt-12">
-            <ProductFlipCard />
-          </Reveal>
-        </section>
-
-        {/* §7 social proof — testimonials + metrics (illustrative / fictional
-            stand-in until real proof exists; see SocialProof). */}
-        <SocialProof />
-
-        <DataProtection />
-
-        <B2BOnlyBand />
-        <FAQ />
-        <FinalCTA />
+        <StepsFlow />
       </main>
-      <Footer />
+      <LandingFooterBar />
       {/* Last child — a "use client" island; page.tsx stays a server component. */}
       <CookieBanner />
     </div>

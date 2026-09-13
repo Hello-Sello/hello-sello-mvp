@@ -1,63 +1,57 @@
-import { AuroraBackground } from "./AuroraBackground";
+import { Building2, Lock, ShieldCheck } from "lucide-react";
 import { CTAButton } from "./CTAButton";
-import { HeroDealFlow } from "./HeroDealFlow";
-import { Reveal } from "./Reveal";
 
 /**
- * Hero (§2). Holds the ONLY <h1> on the page (the outcome headline — SEO H1 + the
- * E2E heading contract), a subhead, the single primary "Request access" CTA →
- * /signup (D-02), a secondary in-page "See how it works" ghost link (navigation,
- * not a second funnel), and the framed product-visual slot. The Aurora backdrop
- * gives the page its signature dreamy depth (decorative, reduced-motion safe).
- *
- * Copy is interim placeholder framing (D-15) — restyle/refill friendly.
+ * Hero (one-screen landing, left column). Holds the ONLY <h1> on the page
+ * (the e2e h1 contract), line 2 as the first <p> after it (the e2e subhead
+ * contract), the audience paragraph, three trust badges, and the single
+ * primary "Request access" CTA -> /signup (D-02) with the verified-only line
+ * under it. No secondary in-page link: there is nothing below to scroll to.
  */
+const BADGES = [
+  { icon: ShieldCheck, label: "GDPR compliant" },
+  { icon: Lock, label: "Full privacy of data" },
+  { icon: Building2, label: "Company to company privacy" },
+];
+
 export function Hero() {
   return (
-    <section className="relative isolate overflow-hidden">
-      <AuroraBackground />
+    <div className="flex flex-col justify-center text-center lg:text-left">
+      <h1 className="text-4xl font-black leading-[1.02] tracking-tight sm:text-5xl xl:text-6xl">
+        <span className="bg-gradient-to-r from-brand to-brand-deep bg-clip-text text-transparent">
+          SAFER BIGGER DEALS
+        </span>
+      </h1>
 
-      <div className="mx-auto max-w-6xl px-6 pb-16 pt-20 text-center sm:pt-28">
-        <Reveal>
-          <p className="inline-block rounded-full border border-brand/15 bg-surface/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-brand backdrop-blur">
-            Chat. Deal. Done.
-          </p>
-        </Reveal>
+      <p className="mt-4 text-xl font-semibold text-ink sm:text-2xl">
+        Close hundreds of B2B deals in one secured Chat
+      </p>
 
-        <Reveal delayMs={60}>
-          <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-ink sm:text-6xl">
-            <span className="bg-gradient-to-r from-brand to-brand-deep bg-clip-text text-transparent">
-              ONE SECURE SPACE FOR EVERY B2B DEAL
-            </span>
-          </h1>
-        </Reveal>
+      <p className="mx-auto mt-4 max-w-xl text-base text-ink-muted lg:mx-0">
+        {"If you're a medical cannabis supplier, grower, pharmacy or wholesaler, this system is built for you. Private chats and confidential deals with your entire network. Buy and sell all products to all partners."}
+      </p>
 
-        <Reveal delayMs={120}>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-ink-muted">
-            Turn daily conversations into structured deals — together. Your
-            fully EU GDPR compliant AI platform for buyers and sellers to trade
-            with encrypted chat. All data is hosted in Germany.
-          </p>
-        </Reveal>
+      <ul className="mt-5 flex flex-wrap justify-center gap-2 lg:justify-start">
+        {BADGES.map(({ icon: Icon, label }) => (
+          <li
+            key={label}
+            className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-ink"
+          >
+            <Icon size={14} className="text-brand" aria-hidden />
+            {label}
+          </li>
+        ))}
+      </ul>
 
-        <Reveal delayMs={180}>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <CTAButton size="lg" withArrow>
-              Request access
-            </CTAButton>
-            <CTAButton href="#how" variant="ghost" size="lg">
-              See how it works
-            </CTAButton>
-          </div>
-          <p className="mt-5 text-sm text-ink-muted">
-            Apply → get verified → onboard. Reviewed within a few business days.
-          </p>
-        </Reveal>
-
-        <Reveal delayMs={120} className="mt-16">
-          <HeroDealFlow />
-        </Reveal>
+      <div className="mt-7 flex flex-col items-center gap-3 lg:items-start">
+        <CTAButton size="lg" withArrow>
+          Request access
+        </CTAButton>
+        <p className="max-w-md text-xs text-ink-muted">
+          Only verified companies (e.g. pharmacies and their partners). Apply for
+          access and we verify your business before you onboard.
+        </p>
       </div>
-    </section>
+    </div>
   );
 }

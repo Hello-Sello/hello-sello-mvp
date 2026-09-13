@@ -7,9 +7,10 @@ import { CTAButton } from "./CTAButton";
 /**
  * Public landing nav (§1). Client component so the reserved German
  * language-toggle slot (D-09 — non-functional this phase) can live here without
- * pulling the page out of server-rendering. Renders the Wordmark, in-page nav
- * anchors, "Log in", the disabled language slot, and the single primary "Request
- * access" CTA → /signup (D-02, via the shared CTAButton).
+ * pulling the page out of server-rendering. Renders the Wordmark, "Log in", the
+ * disabled language slot, and the single primary "Request access" CTA → /signup
+ * (D-02, via the shared CTAButton). No in-page anchors: the one-screen landing
+ * has no sections to jump to (the legal pages reuse this nav as-is).
  *
  * IMPORTANT: this header must NOT carry the `glass-strong` class — the signed-in
  * TopBar uses `header.glass-strong`, and the "no app chrome" E2E guard counts
@@ -23,23 +24,6 @@ export function LandingNav() {
         <Link href="/" aria-label="Hello Sello home">
           <Wordmark />
         </Link>
-
-        {/* Absolute anchors (/#how, /#faq) so they also resolve from the legal
-            pages, which reuse this nav but don't have those section ids. */}
-        <div className="ml-2 hidden items-center gap-6 md:flex">
-          <a
-            href="/#how"
-            className="text-sm font-medium text-ink-muted transition hover:text-brand"
-          >
-            How it works
-          </a>
-          <a
-            href="/#faq"
-            className="text-sm font-medium text-ink-muted transition hover:text-brand"
-          >
-            FAQ
-          </a>
-        </div>
 
         <div className="ml-auto flex items-center gap-3">
           {/* TODO(i18n): German toggle mounts here. D-09 — reserved slot,

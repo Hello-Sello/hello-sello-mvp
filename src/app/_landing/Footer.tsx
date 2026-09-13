@@ -31,15 +31,12 @@ export function Footer() {
           <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink">
             Product
           </h3>
-          {/* Absolute anchors (/#how, /#faq) — the footer also renders on the
-              legal pages, which don't have those section ids. */}
+          {/* The one-screen landing has no in-page sections, so "Product"
+              points home + to the single access funnel (D-02). */}
           <nav className="mt-3 flex flex-col gap-2">
-            <a href="/#how" className="transition hover:text-brand">
-              How it works
-            </a>
-            <a href="/#faq" className="transition hover:text-brand">
-              FAQ
-            </a>
+            <Link href="/" className="transition hover:text-brand">
+              Home
+            </Link>
             <a href="/signup" className="transition hover:text-brand">
               Request access
             </a>
