@@ -753,6 +753,7 @@ export function ShopView({
                 <ProductCard
                   key={`${p.id}:${saveVersion}`}
                   product={p}
+                  appearance={viewerCanManage ? "glass" : "solid"}
                   companyId={company.id}
                   editing={editing}
                   onChanged={() => router.refresh()}
