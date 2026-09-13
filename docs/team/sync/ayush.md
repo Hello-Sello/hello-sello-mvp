@@ -5,9 +5,10 @@
 
 ---
 
-**Last updated:** 2026-07-24 13:44 CEST
-**Branch:** claude/ayush/work - **board Wave 3 built + merged to dev this session.**
-**Status:** offline (session closed; Wave 3 done). Next session = board Wave 4 (diff coverage + real units/batches) or the parallel chat track.
+**Last updated:** 2026-09-13 21:30 CEST
+**Branch:** claude/ayush/work - **landing one-screen redesign landed on dev (#197); release #198 dev -> main pending.**
+**Status:** active (landing redesign shipped to dev; waiting on the release click for #198)
+**PR open:** #198 https://github.com/Hello-Sello/hello-sello-mvp/pull/198 (dev -> main, fast-forward, no conflicts)
 **Linear issue in progress:** none
 **Shared files locked:** none - all released (Wave 3 shared-file edits committed + merged: `docs/deploy/cloud-migrations-pending.md`, `docs/decisions/DECISIONS.md`, the board, this sync file, `e2e/*`, `src/modules/messaging/components/MessageBubble.tsx`, `src/types/database.types.ts`).
 
@@ -22,6 +23,8 @@
 ---
 
 ## Notes for the other agent
+
+**2026-09-13 (21:30 CEST) - landing one-screen redesign is on dev (#197). One touchpoint in your area, no backend.** I brought origin/dev (incl. your #194) into my branch first and resolved 2 UI conflicts by hand: `src/app/page.tsx` (your `APP_LANDING` -> /discover redirect + import kept; my one-screen rewrite around it) and `src/modules/catalog/components/ProductCard.tsx` (your cultivar + PZN edit inputs kept exactly; my CSS-module class added back on the read-only PZN line). Also new on the card: an `appearance` prop (`solid` | `glass`, default solid) + `ProductCard.module.css`; `ShopView` passes `glass` for owners only, buyer storefronts unchanged. Landing: `src/app/_landing/*` rewritten (Hero, StepsFlow, Ticker, LandingFooterBar, ProductFlipCard), 12 old section files deleted, `globals.css` got an `lp-` block. Gate on the combined tree: tsc clean, unit 527/527, landing e2e 21/21 (case 2 now expects /discover, matching your change).
 
 **2026-07-24 (13:44 CEST) - ⚠️ board Wave 3 (DecisionBar fixed roles + Phase-12 review fixes) MERGED to dev. Two touchpoints for you.** Wave 3 shipped: CR-01 (`deal_card` INSERT/UPDATE/DELETE revoke - the forged-signed-deal hole is closed), CR-02 (new `update_deal_draft` RPC - unsent drafts edit in place), B6 fixed-role DecisionBar, B1 Negotiate (pill + "In negotiation" strip, never discards), B3 decline clears the held change, E1 propose/negotiate pills, WR-01..04 RPC hardening, WR-06 basket retry-safety. Gate: 8 SQL suites green from a clean reset, 221/221 unit, deal e2e 19 pass / 5 skip, `next build` clean. **The two things that touch YOU:**
 > 1. **`src/types/database.types.ts` merge touchpoint.** I HAND-ADDED `update_deal_draft` to `Functions` (alphabetical, no wholesale regen - the 12-07 convention). When your Discover PR merges its regenerated `database.types.ts` into dev, expect a conflict here - keep both `update_deal_draft` (mine) and your Discover additions. Same class as the 07-08 regen touchpoint.
