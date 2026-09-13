@@ -497,6 +497,8 @@ export type ProductFieldPatch = {
   location?: string | null;
   price_public?: boolean;
   price_per_gram?: number | null;
+  cultivar?: string | null;
+  local_code_pzn?: string | null;
   cultivator?: string | null;
   country_of_origin?: string | null;
   region?: string | null;
@@ -519,9 +521,9 @@ const NUMERIC_PRODUCT_FIELDS = [
   "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent",
 ] as const;
 
-/** F-05 free-text spec-row fields: trimmed, empty → null (clears the field). */
+/** Free-text product fields: trimmed, empty → null (clears the field). */
 const TEXT_PRODUCT_FIELDS = [
-  "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
+  "cultivar", "local_code_pzn", "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
   "packaging_material", "supplier_product_code",
 ] as const;
 
