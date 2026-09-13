@@ -12,8 +12,9 @@ import { CookieSettingsButton } from "./CookieSettingsButton";
  *   - 09-04 wires the COOKIE-SETTINGS SLOT (a button dispatching
  *     "hs-open-cookie-settings" to re-open the consent banner).
  *
- * The B2B line carries the verbatim `nicht an Verbraucher` substring (LAND-02),
- * reinforcing the dedicated B2BOnlyBand.
+ * The B2B line carries the verbatim `nicht an Verbraucher` substring (LAND-02).
+ * This full footer serves the legal pages; the one-screen landing uses the
+ * one-line LandingFooterBar.
  */
 export function Footer() {
   return (
