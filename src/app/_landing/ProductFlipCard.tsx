@@ -3,15 +3,20 @@ import {
 } from "lucide-react";
 
 /**
- * Product flip card (§6 "here's the inside"). A premium take on the real
- * Present product card (src/modules/catalog/components/ProductCard.tsx): a
- * medical-cannabis listing whose FRONT shows the cover, potency strip, specs,
- * and price, and whose BACK shows the documents / lab results. It auto-flips
- * front <-> back on a loop (pure CSS 3D, see `.pcard` in globals.css), so a
- * logged-out visitor sees "what's behind the gate" without interacting.
+ * Product flip card (the "Product card" step of the one-screen landing). A
+ * premium take on the real Present product card
+ * (src/modules/catalog/components/ProductCard.tsx): a medical-cannabis listing
+ * whose FRONT shows the cover, potency strip, specs, and price, and whose BACK
+ * shows the documents / lab results. It auto-flips front <-> back on a loop
+ * (pure CSS 3D, see `.pcard` in globals.css), so a logged-out visitor sees the
+ * card without interacting.
+ *
+ * `scale` shrinks the whole card visually (a CSS transform on a wrapper sized
+ * to the scaled box) so the layout reserves exactly the space it draws in.
+ * The card's own metrics stay at 350x548, where its type scale was tuned.
  *
  * The product, batch, numbers, and documents are ILLUSTRATIVE / FICTIONAL
- * (D-06 stand-in), consistent with the dummy hero + trusted-by strip.
+ * (D-06 stand-in).
  */
 
 const POTENCY: [string, string][] = [
@@ -39,31 +44,17 @@ const CERTS = ["EU-GMP", "GACP", "ISO 17025", "Lab-tested"];
 const CARD_FACE =
   "pcard-face flex flex-col overflow-hidden rounded-[26px] bg-white shadow-[0_45px_90px_-45px_rgba(122,22,56,0.6)] ring-1 ring-black/[0.06]";
 
-export function ProductFlipCard() {
+const CARD_W = 350;
+const CARD_H = 548;
+
+export function ProductFlipCard({ scale = 1 }: { scale?: number }) {
   return (
-    <div className="relative flex items-center justify-center py-8">
-      {/* soft brand glow behind the card */}
+    <div className="relative" style={{ width: CARD_W * scale, height: CARD_H * scale }}>
       <div
-        className="pointer-events-none absolute h-80 w-80 rounded-full bg-brand-soft/45 blur-[90px]"
+        className="pcard absolute left-0 top-0 origin-top-left"
+        style={{ width: CARD_W, height: CARD_H, transform: `scale(${scale})` }}
         aria-hidden
-      />
-
-      {/* floating accent chips - desktop flair, hidden on small screens */}
-      <div className="pointer-events-none absolute left-[6%] top-10 hidden -rotate-6 lg:block">
-        <div className="glass flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-[0_20px_50px_-24px_rgba(122,22,56,0.5)]">
-          <ShieldCheck className="text-success" size={18} />
-          <span className="text-sm font-semibold text-ink">EU-GMP certified</span>
-        </div>
-      </div>
-      <div className="pointer-events-none absolute bottom-14 right-[6%] hidden rotate-6 lg:block">
-        <div className="glass flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-[0_20px_50px_-24px_rgba(122,22,56,0.5)]">
-          <FlaskConical className="text-brand" size={18} />
-          <span className="text-sm font-semibold text-ink">Lab-tested every batch</span>
-        </div>
-      </div>
-
-      {/* the flip card */}
-      <div className="pcard relative z-10 h-[548px] w-[350px] max-w-full" aria-hidden>
+      >
         <div className="pcard-inner">
           {/* ---------- FRONT ---------- */}
           <article className={CARD_FACE}>
