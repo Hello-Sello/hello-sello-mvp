@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { APP_LANDING } from '@/shared/ui/surfaces'
 import {
   AlertCircle,
   ArrowLeft,
@@ -116,7 +117,6 @@ export function OnboardingStepper({
   businessCategories,
   resumeStep = null,
   prefill = {},
-  licenceRequired = false,
   rejectionReason = null,
   rejectionPreset = null,
   isDuplicate = false,
@@ -132,9 +132,6 @@ export function OnboardingStepper({
   businessCategories: MultiSelectOption[]
   resumeStep?: ResumeStep | null
   prefill?: Prefill
-  // Read server-side from REQUIRE_LICENSE (no NEXT_PUBLIC_ prefix) and passed as
-  // a prop so this client component never reads process.env directly (D-02).
-  licenceRequired?: boolean
   // Rejection-resume props (AUTH-02 / D-07 / D-08). Passed from the Server Component
   // after reading audit_log — no client-side env or DB access needed.
   rejectionReason?: string | null
@@ -184,10 +181,10 @@ export function OnboardingStepper({
   const [primaryProducts, setPrimaryProducts] = useState(prefill.primaryProducts ?? '')
   const [website, setWebsite] = useState(prefill.website ?? '')
 
-  // Advance forward through the sequence, or finish (resume = one step → home).
+  // Advance forward through the sequence, or finish (resume = one step → the app).
   function goNext() {
     if (resuming) {
-      router.push('/home')
+      router.push(APP_LANDING)
       return
     }
     const i = FORWARD.indexOf(step)
@@ -240,7 +237,6 @@ export function OnboardingStepper({
     setActivityInvalid(activityBad)
     if (categoryBad || activityBad) return
 
-    if (licenceRequired && files.length === 0) return setError('Add at least one licence file.')
     const fd = new FormData()
     fd.set('name', name.trim())
     fd.set('country', country)
@@ -333,7 +329,7 @@ export function OnboardingStepper({
               files={files}
               onAddFiles={(fl) => setFiles((cur) => [...cur, ...fl])}
               onRemoveFile={(i) => setFiles((cur) => cur.filter((_, idx) => idx !== i))}
-              licenceRequired={licenceRequired}
+              showLicence={isRejectedResume}
             />
           </>
         )}
@@ -389,7 +385,7 @@ export function OnboardingStepper({
           onSaveProfile={submitProfile}
           onSaveCompanyDetails={submitCompanyDetails}
           onSkip={goNext}
-          onEnter={() => router.push('/home')}
+          onEnter={() => router.push(APP_LANDING)}
         />
       </div>
     </div>
@@ -553,7 +549,7 @@ function StartStep({
           <span>
             <span className="block text-sm font-semibold text-ink">Create a new company</span>
             <span className="block text-xs text-ink-muted">
-              Register your business and upload its licence for review.
+              Register your business and start trading.
             </span>
           </span>
         </button>
@@ -950,7 +946,7 @@ function CompanyStep({
   files,
   onAddFiles,
   onRemoveFile,
-  licenceRequired,
+  showLicence,
 }: {
   name: string
   setName: (v: string) => void
@@ -969,7 +965,9 @@ function CompanyStep({
   files: File[]
   onAddFiles: (files: File[]) => void
   onRemoveFile: (index: number) => void
-  licenceRequired: boolean
+  // Only a rejected company resubmitting uploads a licence. New companies start
+  // verified with no review, so a fresh signup never sees the field.
+  showLicence: boolean
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -1022,50 +1020,52 @@ function CompanyStep({
         invalid={activityInvalid}
         errorText="Pick at least one activity."
       />
-      <div className="flex flex-col gap-1.5 text-sm">
-        <span className="text-ink-muted">
-          Licence or certificate{licenceRequired ? '' : ' (optional while testing)'}
-        </span>
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/40 bg-white/50 p-5 text-center transition hover:bg-white/80">
-          <Plus size={20} className="text-brand" />
-          <span className="text-sm font-medium text-ink">Add a file</span>
-          <span className="text-xs text-ink-muted">PDF or image, up to 20 MB</span>
-          <input
-            type="file"
-            multiple
-            accept="application/pdf,image/jpeg,image/png,image/heic"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) onAddFiles(Array.from(e.target.files))
-              e.target.value = ''
-            }}
-          />
-        </label>
-        {files.length > 0 && (
-          <ul className="flex flex-col gap-2">
-            {files.map((f, i) => (
-              <li
-                key={`${f.name}-${i}`}
-                className="flex items-center gap-2 rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm"
-              >
-                <FileText size={16} className="shrink-0 text-brand" />
-                <span className="min-w-0 flex-1 truncate text-ink">{f.name}</span>
-                <span className="shrink-0 text-xs text-ink-muted">
-                  {(f.size / 1024 / 1024).toFixed(1)} MB
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveFile(i)}
-                  className="shrink-0 text-ink-muted transition hover:text-danger"
-                  aria-label={`Remove ${f.name}`}
+      {showLicence && (
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span className="text-ink-muted">
+            Licence or certificate (optional)
+          </span>
+          <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/40 bg-white/50 p-5 text-center transition hover:bg-white/80">
+            <Plus size={20} className="text-brand" />
+            <span className="text-sm font-medium text-ink">Add a file</span>
+            <span className="text-xs text-ink-muted">PDF or image, up to 20 MB</span>
+            <input
+              type="file"
+              multiple
+              accept="application/pdf,image/jpeg,image/png,image/heic"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) onAddFiles(Array.from(e.target.files))
+                e.target.value = ''
+              }}
+            />
+          </label>
+          {files.length > 0 && (
+            <ul className="flex flex-col gap-2">
+              {files.map((f, i) => (
+                <li
+                  key={`${f.name}-${i}`}
+                  className="flex items-center gap-2 rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm"
                 >
-                  <X size={15} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  <FileText size={16} className="shrink-0 text-brand" />
+                  <span className="min-w-0 flex-1 truncate text-ink">{f.name}</span>
+                  <span className="shrink-0 text-xs text-ink-muted">
+                    {(f.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveFile(i)}
+                    className="shrink-0 text-ink-muted transition hover:text-danger"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    <X size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1076,13 +1076,12 @@ function SubmittedStep() {
       <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success/15">
         <CheckCircle2 size={30} className="text-success" />
       </span>
-      <h2 className="text-base font-semibold text-ink">Application submitted</h2>
+      <h2 className="text-base font-semibold text-ink">Company created</h2>
       <p className="mt-2 text-sm text-ink-muted">
-        We&apos;ve received your company information. The Hello Sello team will verify your
-        account within 12 hours and email you once it&apos;s complete.
+        Your company is set up, so you can start using Hello Sello right away.
       </p>
       <p className="mt-2 text-sm text-ink-muted">
-        In the meantime, finish setting up your account.
+        Next, finish setting up your account.
       </p>
     </div>
   )
@@ -1286,8 +1285,8 @@ function WelcomeStep({ firstName }: { firstName: string | null }) {
         Welcome to Hello Sello{firstName ? `, ${firstName}` : ''}
       </h2>
       <p className="mt-2 text-sm text-ink-muted">
-        You&apos;re all set. While your company is being verified, you can explore the platform
-        and finish any setup steps you skipped from the home checklist.
+        You&apos;re all set. Explore the platform, and finish any setup steps you skipped
+        whenever you like.
       </p>
     </div>
   )

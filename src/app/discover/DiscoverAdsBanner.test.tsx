@@ -1,22 +1,23 @@
 /**
- * Unit contract for <DiscoverAdsBanner> (Lane B, DISC-4). v0 is a full-width
- * "leaderboard" placeholder: it holds the banner's shape (glass panel, "Sponsored"
- * tag) but carries no ad content — one honest empty slot until real ad serving
- * exists. Asserted via renderToStaticMarkup in the repo's node vitest env (no jsdom).
+ * Unit contract for <DiscoverAdsBanner> (Lane B, DISC-4): the full-width
+ * "leaderboard" at the top of Discover, carrying one sponsored creative.
+ * Asserted via renderToStaticMarkup in the repo's node vitest env (no jsdom).
  */
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { DiscoverAdsBanner } from '@/app/discover/DiscoverAdsBanner'
 
 describe('<DiscoverAdsBanner> (DISC-4)', () => {
-  it('renders a labelled sponsored banner', () => {
+  it('labels the slot as sponsored', () => {
     const html = renderToStaticMarkup(<DiscoverAdsBanner />)
-    expect(html).not.toBe('')
-    expect(html).toContain('Sponsored')
+    expect(html).toContain('aria-label="Sponsored"')
+    expect(html).toContain('>Sponsored<')
   })
 
-  it('shows an honest empty slot (no fake ad content)', () => {
+  it('shows the creative, with alt text that says what the ad is', () => {
     const html = renderToStaticMarkup(<DiscoverAdsBanner />)
-    expect(html).toContain('Your ad could be here')
+    expect(html).toMatch(/<img[^>]*alt="Superseed Grape Cookies[^"]*"/)
+    expect(html).toContain('grape-cookies-banner.png')
+    expect(html).not.toContain('Your ad could be here')
   })
 })

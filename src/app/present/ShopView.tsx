@@ -151,7 +151,7 @@ const NUM_FIELD_KEYS = [
 // Badge are selects on the card (not free text), but the wire value is still
 // a string.
 const TEXT_FIELD_KEYS = [
-  "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
+  "cultivar", "local_code_pzn", "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
   "dominance_code", "irradiation_code", "badge_code", "packaging_material", "supplier_product_code",
 ] as const;
 

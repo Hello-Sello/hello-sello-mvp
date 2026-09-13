@@ -28,4 +28,16 @@ describe('<DiscoverShell> (DISC-6)', () => {
     expect(html).toContain('Companies') // directory section header
     expect(html).toContain('Acme Cultivation') // a company row
   })
+
+  it('puts the Companies directory right under the ads banner, above the duo', () => {
+    const html = renderToStaticMarkup(
+      <DiscoverShell companies={[co({ id: 'a', name: 'Acme Cultivation' })]} />,
+    )
+    const banner = html.indexOf('aria-label="Sponsored"')
+    const directory = html.indexOf('Search companies by name')
+    const duo = html.indexOf('My network')
+    expect(banner).toBeGreaterThanOrEqual(0)
+    expect(directory).toBeGreaterThan(banner)
+    expect(duo).toBeGreaterThan(directory)
+  })
 })

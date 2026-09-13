@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 ✅ → T07 ✅ → T08 ✅ → T09 ✅) → ship (in progress — Steps 1-4 done, migrations LIVE, security scan CLEAN — Step 5 PR next)
+stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 ✅ → T07 ✅ → T08 ✅ → T09 ✅) → ship ✅ (PR #186, merged 2026-09-07) → **SLUG COMPLETE**
 
 ## /ship log
 - 2026-09-07 — 5 commits landed (T06-T09 + a live-feedback fix flattening Connect's sidebar
@@ -48,6 +48,7 @@ stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02
   `auth.uid()`, not client input; admin relationship actions are gated by `is_hs_team()` inside
   the RPCs, not just the route redirect; the pack-sizes migration adds no new `SECURITY DEFINER`
   surface. **Step 3 and Step 4 both done — Step 5 (PR) next.**
+- 2026-09-08 — Step 5 closed via PR #186 (merged 2026-09-07), missed until now. SLUG COMPLETE.
 
 ## Seed
 Muskan, 2026-08-31, via `/triage`: "deletion of connection request page inside connect"

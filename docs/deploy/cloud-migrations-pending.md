@@ -23,9 +23,9 @@
 
 ---
 
-## ⚠️ PENDING (2026-09-08) — `shop_location` entity, LOCAL ONLY, NOT PUSHED
+## ⚠️ PENDING (2026-09-08) — `shop_location` entity — ~~LOCAL ONLY, NOT PUSHED~~ **CONFIRMED LIVE on cloud, verified 2026-09-08** (`to_regclass('public.shop_location')` resolves against `byipusuthdlskdxoexkt`)
 
-**One migration, applied to LOCAL only via `supabase migration up --local`. Not on cloud.**
+**~~One migration, applied to LOCAL only via `supabase migration up --local`. Not on cloud.~~ Now on cloud too — table confirmed present via live query, session 105.**
 
 `20260908120000_shop_location_entity.sql` — new `shop_location` table (company-scoped RLS +
 `revoke all ... from anon`), `product.location_id` FK, and a backfill that creates one shop row per

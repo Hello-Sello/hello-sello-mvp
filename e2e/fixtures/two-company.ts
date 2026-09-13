@@ -707,15 +707,103 @@ export async function loginAs(page: Page, who: Who): Promise<void> {
   await page.locator('input[name="password"]').fill(password)
   await page.getByRole('button', { name: /sign in/i }).click()
   // the app redirects off /login once the session is set; wait for that.
-  await page.waitForURL((url) => !url.pathname.includes('/login'))
+  await page.waitForURL((url) => !isLoginPath(url.pathname))
+}
+
+/** A signed-in cookie jar, held for the lifetime of ONE worker process. */
+type SessionCookies = Awaited<ReturnType<BrowserContext['storageState']>>['cookies']
+
+/**
+ * Sessions minted this run, keyed by side. IN MEMORY, deliberately not a file:
+ * a session cached on disk outlives the run that made it, and every way it can
+ * go stale is invisible from the outside. `supabase db reset` drops
+ * `auth.sessions` while the seeded user ids stay pinned, so a saved token still
+ * verifies against a database that has never heard of its session; a run killed
+ * mid-write leaves JSON that throws on parse inside `beforeEach`; and a
+ * cwd-relative path can drop live auth cookies outside the one `.gitignore`
+ * entry that covers them. Nothing here survives the process, so none of that
+ * can happen.
+ */
+const sessionCache = new Map<Who, SessionCookies>()
+
+/** `/home` is gated; `/` is the PUBLIC landing (shared/db/proxy.ts allowlists
+ *  `path === '/'` exactly). Probing the session on `/` therefore proves nothing
+ *  — an anonymous visitor is served the landing page and never sees `/login`. */
+const GATED_PROBE = '/home'
+
+/** The ONE definition of "this page is the login page", shared with `loginAs`'s
+ *  own wait so the two can never disagree about what signed-out looks like. */
+export function isLoginPath(pathname: string): boolean {
+  return pathname === '/login' || pathname.startsWith('/login/')
 }
 
 /**
- * Open two independent browser contexts and return a logged-in page for each
- * side. Separate contexts (not just two tabs) are required so Alice's and Bob's
- * Supabase sessions never share cookies — the two-sided sign / negotiate gate
- * only makes sense when each side acts as itself.
+ * A signed-in context for one side: reuse this run's session when it still
+ * works, sign in for real when it does not.
+ *
+ * WHY: `deal-change.spec.ts` has ONE `beforeEach` that calls `openTwoContexts`,
+ * and it runs for each of its 19 live tests (5 of its 24 are skipped at
+ * declaration) — so a full-file run drove the login form 38 times, and the
+ * flake this replaces landed exactly there, timing out at `page.goto('/login')`
+ * or the `waitForURL` off it at a rotating test position. `@supabase/ssr`'s
+ * `createBrowserClient` keeps the session in COOKIES, so replaying the cookie
+ * jar skips the form entirely.
+ *
+ * COOKIES ONLY, never the `origins` half of a storageState: that carries
+ * localStorage, where the app persists real UI state (`hs:rail-collapsed`,
+ * `hs:chat-list-collapsed`, `hs-cookie-consent`). Replaying whatever the
+ * minting page happened to leave there would give every later context a UI
+ * that differs from a cold one — a warm-cache-only flake, which is the exact
+ * shape of bug this change exists to remove.
+ *
+ * The re-mint path is not belt-and-braces. `password-reset.spec.ts` performs
+ * real password changes on Alice, and a password update terminates her other
+ * sessions; `email-change.spec.ts` flips the same account's email. Driving the
+ * form per test was immune because it minted a fresh session every time —
+ * falling back on a failed probe keeps that immunity and pays for the form
+ * only when it is actually needed.
+ *
+ * Known limit, stated rather than implied: the probe reads the landing URL, and
+ * the gate (`proxy.ts` → `getClaims()`) verifies the token's signature locally.
+ * A session revoked server-side therefore still probes as live until its access
+ * token expires. That window is a stale session, not a wrong one — and it is
+ * strictly smaller than the old behaviour's exposure, which was a fresh login
+ * against an account another spec had just mutated.
  */
+export async function openSignedInContext(
+  browser: Browser,
+  who: Who,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const cached = sessionCache.get(who)
+  if (cached) {
+    const context = await browser.newContext({ storageState: { cookies: cached, origins: [] } })
+    try {
+      const page = await context.newPage()
+      await page.goto(GATED_PROBE)
+      if (!isLoginPath(new URL(page.url()).pathname)) return { context, page }
+    } catch {
+      // A probe that throws is a probe that failed — fall through and re-mint
+      // rather than surfacing a navigation error as a missing deal card.
+    }
+    // Drop the dead entry so the next caller starts cold instead of repeating
+    // restore → probe → re-login for the rest of the run.
+    sessionCache.delete(who)
+    await context.close()
+  }
+
+  const context = await browser.newContext()
+  try {
+    const page = await context.newPage()
+    await loginAs(page, who)
+    await page.goto(GATED_PROBE)
+    sessionCache.set(who, (await context.storageState()).cookies)
+    return { context, page }
+  } catch (e) {
+    await context.close() // release on the failure path too, not just on success
+    throw e
+  }
+}
+
 export async function openTwoContexts(
   browser: Browser,
 ): Promise<{
@@ -724,13 +812,16 @@ export async function openTwoContexts(
   alicePage: Page
   bobPage: Page
 }> {
-  const aliceContext = await browser.newContext()
-  const bobContext = await browser.newContext()
-  const alicePage = await aliceContext.newPage()
-  const bobPage = await bobContext.newPage()
-  await loginAs(alicePage, 'alice')
-  await loginAs(bobPage, 'bob')
-  return { aliceContext, bobContext, alicePage, bobPage }
+  const [alice, bob] = await Promise.all([
+    openSignedInContext(browser, 'alice'),
+    openSignedInContext(browser, 'bob'),
+  ])
+  return {
+    aliceContext: alice.context,
+    bobContext: bob.context,
+    alicePage: alice.page,
+    bobPage: bob.page,
+  }
 }
 
 /**

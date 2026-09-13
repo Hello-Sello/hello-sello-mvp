@@ -74,17 +74,17 @@ test('logged-out lands: GET / returns the landing (200, hero h1, no /login redir
 })
 
 // ---------------------------------------------------------------------------
-// Case 2 — LAND-01: signed-in GET / redirects into the app (URL → /home).
+// Case 2 — LAND-01: signed-in GET / redirects into the app (URL → /discover).
 // RED: the landing + signed-in redirect-to-app branch is not built (09-02).
 // ---------------------------------------------------------------------------
-test('signed-in redirected: GET / sends a signed-in user into the app (/home)', async ({
+test('signed-in redirected: GET / sends a signed-in user into the app (/discover)', async ({
   page,
   context,
 }) => {
   await signIn(page, context, ALICE_EMAIL, ALICE_PASSWORD)
   await page.goto('/')
-  await page.waitForURL((url) => url.pathname === '/home', { timeout: 10_000 })
-  expect(page.url()).toContain('/home')
+  await page.waitForURL((url) => url.pathname === '/discover', { timeout: 10_000 })
+  expect(page.url()).toContain('/discover')
   expect(new URL(page.url()).pathname).not.toBe('/')
 })
 
