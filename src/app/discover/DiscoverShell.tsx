@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * DiscoverShell — the one scrolling Discover page (DISC-6), laid out per Variant D:
+ * DiscoverShell — the one scrolling Discover page (DISC-6), laid out per Variant D
+ * with the Companies directory moved up, so a new buyer finds suppliers first:
  *
  *   Ads leaderboard
+ *   Companies                    (directory: search + filters + rows)
  *   [ Requests | My Network ]   ← side by side, equal height, each scrolls inside
  *   People you may know          (cards)
- *   Companies                    (directory: search + filters + rows)
  *
  * Sections are evenly spaced (one gap value, not per-section margins). Client
  * component so it can later coordinate cross-section state; its data is
@@ -51,6 +52,8 @@ export function DiscoverShell({
       <div className="flex flex-col gap-[22px]">
         <DiscoverAdsBanner />
 
+        <CompaniesSection companies={companies} />
+
         {/* Requests | My Network — the Variant D "split top", equal-height columns. */}
         <div className="grid grid-cols-1 gap-[22px] md:grid-cols-2 md:items-stretch">
           <RequestsSection companyRequests={companyRequests} personRequests={personRequests} />
@@ -58,8 +61,6 @@ export function DiscoverShell({
         </div>
 
         <NewPeopleSection people={people} />
-
-        <CompaniesSection companies={companies} />
       </div>
     </div>
   );

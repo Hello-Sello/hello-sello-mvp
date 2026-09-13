@@ -69,6 +69,8 @@ export type PendingBatchEdit = {
  *  and a boolean (resealable). Same contract — absent means "unchanged". */
 export type ProductFieldDraft = {
   name?: string;
+  cultivar?: string;
+  local_code_pzn?: string;
   thc_percent?: string;
   cbd_percent?: string;
   cbg_percent?: string;
@@ -131,6 +133,14 @@ type SpecRowDef =
 
 const specField =
   "w-full min-w-0 rounded border border-ink/15 bg-white px-1.5 py-0.5 text-xs font-semibold text-brand-deep focus:border-brand focus:outline-none";
+
+// The identity lines under the product name: the strain (`cultivar` — not the
+// grower, which is the `cultivator` spec row) and the PZN. The card header and
+// the details dialog both edit them into the same draft as every other field.
+const IDENTITY_FIELDS = [
+  { key: "cultivar", label: "Cultivar" },
+  { key: "local_code_pzn", label: "PZN" },
+] as const;
 
 const DOMINANCE_LABEL: Record<string, string> = {
   indica: "Indica",
@@ -704,8 +714,24 @@ export function ProductCard({
                 ) : (
                   <div className="truncate text-[16px] font-extrabold leading-tight text-brand-deep">{p.name}</div>
                 )}
-                {p.cultivar && <div className="mt-0.5 truncate text-xs text-ink-muted">{p.cultivar}</div>}
-                {p.local_code_pzn && <div className="mt-0.5 text-[11px] text-ink/45">PZN{p.local_code_pzn}</div>}
+                {editing ? (
+                  IDENTITY_FIELDS.map(({ key, label }) => (
+                    <label key={key} className="mt-1 flex items-center gap-2 text-[11px]">
+                      <span className="w-[52px] shrink-0 font-medium text-ink-muted">{label}</span>
+                      <input
+                        aria-label={label}
+                        value={fields[key] ?? p[key] ?? ""}
+                        onChange={(e) => onEditField?.(p.id, { [key]: e.target.value })}
+                        className={specField}
+                      />
+                    </label>
+                  ))
+                ) : (
+                  <>
+                    {p.cultivar && <div className="mt-0.5 truncate text-xs text-ink-muted">{p.cultivar}</div>}
+                    {p.local_code_pzn && <div className="mt-0.5 text-[11px] text-ink/45">PZN{p.local_code_pzn}</div>}
+                  </>
+                )}
               </div>
               {flag && <span className="ml-auto text-lg leading-none">{flag}</span>}
             </div>
@@ -1128,6 +1154,18 @@ function ProductDetailsDialog({
               className={field}
             />
           </label>
+
+          {IDENTITY_FIELDS.map(({ key, label }) => (
+            <label key={key} className="block">
+              <span className="text-xs font-semibold text-ink/70">{label}</span>
+              <input
+                aria-label={label}
+                value={fields[key] ?? p[key] ?? ""}
+                onChange={(e) => onEditField({ [key]: e.target.value })}
+                className={field}
+              />
+            </label>
+          ))}
 
           <div className="grid grid-cols-5 gap-2">
             {strip.map(([label, key, val]) => (

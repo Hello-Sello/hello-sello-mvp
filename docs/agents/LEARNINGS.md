@@ -2665,3 +2665,25 @@ commit as HEAD** immediately after a successful merge — two outputs that flatl
 other. `rtk proxy <cmd>` gave the truth. **Reach for `rtk proxy` by default wherever a wrong answer
 is expensive** — merges, deploys, migration state. Extends L-069 / HEL-80, now confirmed to reach
 `git log`, `lsof`, `ls` and `grep`.
+
+## L-078 — a worktree branch is invisible until someone merges it back
+
+Session 96 did real work on a separate worktree branch; it sat unmergeable and unnoticed until
+session 97 found it while trying to delete the worktree. Parallel sessions on separate branches
+is correct isolation, but nothing surfaces an unmerged branch on its own. Check for unmerged
+worktree branches before deleting a worktree, not just before closing a session.
+
+## L-079 — 127.0.0.1 and localhost are different cookie hosts, and the failure looks silent
+
+The app is pinned to `localhost:3000` (`config.toml:158`). Visiting `127.0.0.1:3000` isn't an
+error — it's a distinct cookie host, so auth state never attaches. Symptom: the account chip
+stuck on "…" and Sign out doing nothing, no error anywhere. Check the host in the address bar
+before debugging auth state.
+
+## L-080 — a comment about what a state change leaves possible must be checked against the transition functions
+
+After making new companies start `verified`, the migration comment said rejected/revoked "still work" for
+companies an admin acts on later. No RPC moves a company out of `verified`: `approve_company` and
+`reject_company` guard on `pending`, `resubmit_company_verification` on `rejected`. The security review caught
+it before the PR. Before writing what a state change leaves possible, list the transition functions and their
+FROM-state guards.

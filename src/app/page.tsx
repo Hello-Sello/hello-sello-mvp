@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/shared/auth";
+import { APP_LANDING } from "@/shared/ui/surfaces";
 import { LandingNav } from "./_landing/LandingNav";
 import { Hero } from "./_landing/Hero";
 import { TrustedBy } from "./_landing/TrustedBy";
@@ -31,12 +32,12 @@ export const metadata: Metadata = {
  * Root route. The public front door (D-01): a logged-out visitor lands on the
  * marketing page; a signed-in visitor is redirected into the app. The session
  * check is a page-level read (getCurrentUser — JWT-revalidated), NOT proxy logic
- * (B7 lock — proxy stays thin, no DB lookups). Redirect target is /home, which
- * already handles every verification / no-company state safely.
+ * (B7 lock — proxy stays thin, no DB lookups). Redirect target is APP_LANDING,
+ * whose surface gate routes every verification / no-company state on safely.
  */
 export default async function RootPage() {
   const user = await getCurrentUser();
-  if (user) redirect("/home");
+  if (user) redirect(APP_LANDING);
 
   return (
     <div className="min-h-screen">
