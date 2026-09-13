@@ -747,3 +747,7 @@ a fixed 340px panel was wider than a card and covered the neighbouring product. 
 from the card removes the guess at any window size or column count.
 
 *(Source: DEV-167 build session 2026-09-08 with Muskan, driven live in local dev.)*
+
+## 2026-09-13 — New companies start verified: no licence upload, no review (MVP pharmacy push)
+
+- `company.verification_status` defaults to `verified` and onboarding no longer asks for a licence — a deliberate deviation from the DEV-38 manual-KYC lock so pharmacies can sign up and use Discover at once. **Accepted risk:** unlicensed signups see Rx-cannabis catalogues, prices and the sponsored banner (§ 10(1) HWG) and can send orders (MedCanG § 4). **Undo:** set the default back to `pending` and restore the licence field.

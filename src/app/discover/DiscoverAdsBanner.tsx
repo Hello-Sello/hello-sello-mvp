@@ -4,9 +4,10 @@
  * ad serving yet. The box takes the creative's own aspect ratio instead of a
  * fixed height, so the ad's text and logo are never cropped on narrow screens.
  *
- * Discover is verified companies only (./layout.tsx). That gate is what keeps
- * this ad inside professional circles, as § 10(1) HWG requires for prescription
- * medicines such as medical cannabis — don't reuse it on a public surface.
+ * New companies start verified (no licence review), so anyone who signs up sees
+ * this ad. § 10(1) HWG limits advertising prescription medicines such as medical
+ * cannabis to professional circles; reaching beyond them is a risk accepted for
+ * the MVP. Never place it on a page that works without signing in.
  */
 import Image from "next/image";
 
