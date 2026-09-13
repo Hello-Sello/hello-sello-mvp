@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
+import { APP_LANDING } from '@/shared/ui/surfaces'
 import { getMyProfile } from '@/modules/profile'
 import { OnboardingStepper } from './OnboardingStepper'
 import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
@@ -57,9 +58,9 @@ export default async function OnboardingPage({
     rejectedCompanyName = co?.name ?? null
   }
 
-  // Guard: company exists + no resume step + not rejected → finished onboarding, go home.
-  // Rejected is explicitly exempted to prevent the /home ↔ /onboarding redirect loop.
-  if (person.company_id && !resumeStep && companyStatus !== 'rejected') redirect('/home')
+  // Guard: company exists + no resume step + not rejected → finished onboarding, into the app.
+  // Rejected is explicitly exempted to prevent an app ↔ /onboarding redirect loop.
+  if (person.company_id && !resumeStep && companyStatus !== 'rejected') redirect(APP_LANDING)
 
   // Path B (D-10): a COMPANY-LESS requester with a PENDING join_request lands on the
   // S2 "Request sent" screen instead of the create-company fork. This read is

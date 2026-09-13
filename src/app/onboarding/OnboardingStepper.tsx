@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { APP_LANDING } from '@/shared/ui/surfaces'
 import {
   AlertCircle,
   ArrowLeft,
@@ -184,10 +185,10 @@ export function OnboardingStepper({
   const [primaryProducts, setPrimaryProducts] = useState(prefill.primaryProducts ?? '')
   const [website, setWebsite] = useState(prefill.website ?? '')
 
-  // Advance forward through the sequence, or finish (resume = one step → home).
+  // Advance forward through the sequence, or finish (resume = one step → the app).
   function goNext() {
     if (resuming) {
-      router.push('/home')
+      router.push(APP_LANDING)
       return
     }
     const i = FORWARD.indexOf(step)
@@ -389,7 +390,7 @@ export function OnboardingStepper({
           onSaveProfile={submitProfile}
           onSaveCompanyDetails={submitCompanyDetails}
           onSkip={goNext}
-          onEnter={() => router.push('/home')}
+          onEnter={() => router.push(APP_LANDING)}
         />
       </div>
     </div>

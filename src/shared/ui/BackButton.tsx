@@ -2,12 +2,13 @@
 
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
+import { APP_LANDING } from './surfaces'
 
 /**
  * Reusable back control. Goes to the previous page in history; if there's none
  * (e.g. the page was opened in a fresh tab), falls back to a safe destination.
  */
-export function BackButton({ label = 'Back', fallback = '/home' }: { label?: string; fallback?: string }) {
+export function BackButton({ label = 'Back', fallback = APP_LANDING }: { label?: string; fallback?: string }) {
   const router = useRouter()
   return (
     <button

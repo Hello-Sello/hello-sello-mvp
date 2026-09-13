@@ -46,7 +46,7 @@ export type Surface = {
 };
 
 export const SURFACES: Surface[] = [
-  { key: "home", label: "Home", href: "/home", icon: Home, state: "active" },
+  { key: "home", label: "Home", href: "/home", icon: Home, state: "soon" },
   { key: "connect", label: "Connect", href: "/connect", icon: MessagesSquare, state: "active" },
   { key: "discover", label: "Discover", href: "/discover", icon: Compass, state: "active" },
   { key: "present", label: "Present", href: "/present", icon: Store, state: "active" },
@@ -54,3 +54,11 @@ export const SURFACES: Surface[] = [
   { key: "sell", label: "Allocate", href: "/sell", icon: Tag, state: "active" },
   { key: "trade", label: "Trade", href: "/trade", icon: ArrowLeftRight, state: "soon" },
 ];
+
+/**
+ * Where a signed-in user enters the app: after login, onboarding, an invite, or
+ * a Back with no history. Users who can't use it yet are routed on by that
+ * surface's gate (pending/revoked → /home, no company → /onboarding), so this
+ * never needs to know about verification states.
+ */
+export const APP_LANDING = "/discover";
