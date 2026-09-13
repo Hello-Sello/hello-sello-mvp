@@ -1,63 +1,48 @@
-import { AuroraBackground } from "./AuroraBackground";
+import { Check } from "lucide-react";
 import { CTAButton } from "./CTAButton";
-import { HeroDealFlow } from "./HeroDealFlow";
-import { Reveal } from "./Reveal";
 
 /**
- * Hero (§2). Holds the ONLY <h1> on the page (the outcome headline — SEO H1 + the
- * E2E heading contract), a subhead, the single primary "Request access" CTA →
- * /signup (D-02), a secondary in-page "See how it works" ghost link (navigation,
- * not a second funnel), and the framed product-visual slot. The Aurora backdrop
- * gives the page its signature dreamy depth (decorative, reduced-motion safe).
+ * Hero (one-screen landing, left column). Holds the ONLY <h1> on the page
+ * (the e2e h1 contract), line 2 as the first <p> after it (the e2e subhead
+ * contract), a three-item trust line, and the single
+ * primary "Request access" CTA -> /signup (D-02) with the verified-only line
+ * under it. No secondary in-page link: there is nothing below to scroll to.
  *
- * Copy is interim placeholder framing (D-15) — restyle/refill friendly.
+ * The headline is one text node ("SAFER BIGGER DEALS" - the e2e asserts the
+ * exact text) set in the display face at a measure of ~6em, so each word takes
+ * its own line and the three words stack like a poster.
  */
+const TRUST = ["GDPR compliant", "Full privacy of data", "Company to company privacy"];
+
 export function Hero() {
   return (
-    <section className="relative isolate overflow-hidden">
-      <AuroraBackground />
+    <div className="flex flex-col justify-center">
+      <h1 className="lp-display max-w-[6em] text-[2.9rem] font-extrabold leading-[0.93] tracking-[-0.035em] text-brand-deep sm:text-[3.5rem] xl:text-[4rem]">
+        SAFER BIGGER DEALS
+      </h1>
 
-      <div className="mx-auto max-w-6xl px-6 pb-16 pt-20 text-center sm:pt-28">
-        <Reveal>
-          <p className="inline-block rounded-full border border-brand/15 bg-surface/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-brand backdrop-blur">
-            Chat. Deal. Done.
-          </p>
-        </Reveal>
+      <p className="lp-display mt-5 max-w-[24ch] text-[1.3rem] font-semibold leading-snug tracking-[-0.015em] text-ink sm:text-2xl">
+        Close hundreds of B2B deals in one secured Chat
+      </p>
 
-        <Reveal delayMs={60}>
-          <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-ink sm:text-6xl">
-            <span className="bg-gradient-to-r from-brand to-brand-deep bg-clip-text text-transparent">
-              ONE SECURE SPACE FOR EVERY B2B DEAL
+      <ul className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium text-ink">
+        {TRUST.map((label) => (
+          <li key={label} className="flex items-center gap-1.5">
+            <span className="grid h-4 w-4 place-items-center rounded-full bg-brand/10 text-brand">
+              <Check size={10} strokeWidth={3} aria-hidden />
             </span>
-          </h1>
-        </Reveal>
+            {label}
+          </li>
+        ))}
+      </ul>
 
-        <Reveal delayMs={120}>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-ink-muted">
-            Turn daily conversations into structured deals — together. Your
-            fully EU GDPR compliant AI platform for buyers and sellers to trade
-            with encrypted chat. All data is hosted in Germany.
-          </p>
-        </Reveal>
-
-        <Reveal delayMs={180}>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <CTAButton size="lg" withArrow>
-              Request access
-            </CTAButton>
-            <CTAButton href="#how" variant="ghost" size="lg">
-              See how it works
-            </CTAButton>
-          </div>
-          <p className="mt-5 text-sm text-ink-muted">
-            Apply → get verified → onboard. Reviewed within a few business days.
-          </p>
-        </Reveal>
-
-        <Reveal delayMs={120} className="mt-16">
-          <HeroDealFlow />
-        </Reveal>
+      <div className="mt-6 flex flex-col items-start gap-2.5">
+        <CTAButton size="lg">Request access</CTAButton>
+        <p className="max-w-[52ch] text-xs leading-relaxed text-ink-muted">
+          Only verified companies (e.g. pharmacies and their partners). Apply for
+          access and we verify your business before you onboard.
+        </p>
       </div>
-    </section>
+    </div>
   );
 }

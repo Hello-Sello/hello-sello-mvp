@@ -34,6 +34,7 @@ import { draftFromTiers, draftNumber, validateLadder } from "../ladderDraft";
 import type { LadderRowDraft } from "../ladderDraft";
 import { PackSizeSelector } from "./PackSizeSelector";
 import { MediaManager } from "./MediaManager";
+import styles from "./ProductCard.module.css";
 import { softDeleteProduct, setProductProfileVisible } from "../manage";
 import { buyerVisibilityGaps, buyerVisibilityLabel } from "../visibility";
 import { DOMINANCE_CODES, IRRADIATION_CODES, BADGE_CODES } from "../template";
@@ -199,8 +200,11 @@ export function ProductCard({
   onReorder,
   viewerIsOwner = true,
   onRequestPricing,
+  appearance = "solid",
 }: {
   product: ShopProduct;
+  /** Visual treatment only; Present opts in without changing buyer storefronts. */
+  appearance?: "solid" | "glass";
   companyId?: string;
   editing?: boolean;
   /** Fires on Add — the store/send flow is a later phase; defaults to a no-op here. */
@@ -510,7 +514,7 @@ export function ProductCard({
     <>
     <div
       data-testid="product-card"
-      className={`relative h-[640px] rounded-3xl transition ${
+      className={`relative h-[640px] rounded-3xl transition ${appearance === "glass" ? styles.glass : ""} ${
         reorderOver ? "ring-2 ring-brand ring-offset-2" : ""
       }`}
       style={{ perspective: "1900px" }}
@@ -524,7 +528,7 @@ export function ProductCard({
       >
         {/* ---------- FRONT ---------- */}
         <div
-          className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60"
+          className={`${styles.face} absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60`}
           style={{ backfaceVisibility: "hidden", pointerEvents: flipped ? "none" : undefined }}
         >
           {/* Square cover, but capped at 250px tall (matches the prototype's
@@ -702,7 +706,7 @@ export function ProductCard({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-start gap-2 px-3.5 pt-2.5">
+            <div className={`${styles.heading} flex items-start gap-2 px-3.5 pt-2.5`}>
               <div className="min-w-0 flex-1">
                 {editing ? (
                   <input
@@ -712,7 +716,7 @@ export function ProductCard({
                     className="w-full min-w-0 rounded-md border border-ink/20 bg-white px-1.5 py-0.5 text-[15px] font-extrabold leading-tight text-brand-deep focus:border-brand focus:outline-none"
                   />
                 ) : (
-                  <div className="truncate text-[16px] font-extrabold leading-tight text-brand-deep">{p.name}</div>
+                  <div className={`${styles.name} truncate text-[16px] font-extrabold leading-tight text-brand-deep`}>{p.name}</div>
                 )}
                 {editing ? (
                   IDENTITY_FIELDS.map(({ key, label }) => (
@@ -729,7 +733,7 @@ export function ProductCard({
                 ) : (
                   <>
                     {p.cultivar && <div className="mt-0.5 truncate text-xs text-ink-muted">{p.cultivar}</div>}
-                    {p.local_code_pzn && <div className="mt-0.5 text-[11px] text-ink/45">PZN{p.local_code_pzn}</div>}
+                    {p.local_code_pzn && <div className={`${styles.productCode} mt-0.5 text-[11px] text-ink/45`}>PZN{p.local_code_pzn}</div>}
                   </>
                 )}
               </div>
@@ -737,7 +741,7 @@ export function ProductCard({
             </div>
 
             {/* 5-value strip: THC / CBD / CBG / CBN / Terp% — inline inputs in edit mode */}
-            <div className="grid grid-cols-5 gap-1 px-3.5 pt-2">
+            <div className={`${styles.metrics} grid grid-cols-5 gap-1 px-3.5 pt-2`}>
               {strip.map(([label, key, val]) => (
                 <div key={label} className="rounded-md border border-ink/10 bg-brand/[0.025] px-0.5 py-1 text-center">
                   {editing ? (
@@ -771,7 +775,7 @@ export function ProductCard({
             <div className="relative mt-1.5 flex min-h-[80px] flex-1 flex-col">
               <div className="speclist-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5 pb-7">
                 {specRows.map((row) => (
-                  <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
+                  <div key={row.label} className={`${styles.specRow} flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs`}>
                     <span className="w-[78px] shrink-0 font-medium text-ink-muted">{row.label}</span>
                     {editing ? (
                       <SpecFieldEditor
@@ -804,7 +808,7 @@ export function ProductCard({
                   Lineage row read at rest. Pairs with the list's `pb-7`: at the
                   end of the scroll that padding holds the last row clear of this
                   gradient, so nothing is ever hidden by it. */}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-white via-white to-transparent" />
+              <div className={`${styles.fade} pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-white via-white to-transparent`} />
             </div>
 
             {/* footer: pack bubbles + price, then availability + stepper + Add.
@@ -813,11 +817,11 @@ export function ProductCard({
                 so the whole edit footer scrolls instead of clipping its tail —
                 "+ Add tier" stays reachable at any row/error count (G4 rd 2). */}
             <div
-              className={`relative z-[5] border-t border-ink/10 bg-white px-3.5 pb-3 pt-2.5 ${
+              className={`${styles.footer} relative z-[5] border-t border-ink/10 bg-white px-3.5 pb-3 pt-2.5 ${
                 editing ? "min-h-0 overflow-y-auto" : "shrink-0"
               }`}
             >
-              <div className="mb-2 flex items-end justify-between gap-2.5">
+              <div className={`${styles.priceRow} mb-2 flex items-end justify-between gap-2.5`}>
                 <PackSizeSelector sizes={sizes.map((s) => s.label)} selected={pack} onSelect={setPack} />
                 <div className="flex shrink-0 flex-col items-end">
                   {editing ? (
@@ -844,7 +848,7 @@ export function ProductCard({
                     </div>
                   ) : priceShown ? (
                     <>
-                      <span className="text-right text-[17px] font-extrabold text-brand-deep tabular-nums">
+                      <span className={`${styles.price} text-right text-[17px] font-extrabold text-brand-deep tabular-nums`}>
                         <small className="-mb-0.5 block text-[10.5px] font-semibold text-ink-muted">Approx.</small>
                         {/* The APPLIED price at the current pack × qty (T05
                             amendment 3) — always agrees with the chip and the
@@ -995,7 +999,7 @@ export function ProductCard({
                   rendered disabled) and its ~48px is exactly what the tier
                   editor needs inside the fixed-height footer (G4 feedback). */}
               {canBuy && (
-                <div className="flex gap-2">
+                <div className={`${styles.buyRow} flex gap-2`}>
                   <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
                     <button
                       type="button" aria-label="Decrease quantity"
@@ -1074,7 +1078,7 @@ export function ProductCard({
 
         {/* ---------- BACK — Documents & Media (reusable MediaManager) ---------- */}
         <div
-          className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60"
+          className={`${styles.face} absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60`}
           style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", pointerEvents: flipped ? undefined : "none" }}
         >
           <MediaManager product={p} companyId={companyId} editing={editing} onChanged={onChanged} />

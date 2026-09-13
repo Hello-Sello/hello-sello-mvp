@@ -12,8 +12,9 @@ import { CookieSettingsButton } from "./CookieSettingsButton";
  *   - 09-04 wires the COOKIE-SETTINGS SLOT (a button dispatching
  *     "hs-open-cookie-settings" to re-open the consent banner).
  *
- * The B2B line carries the verbatim `nicht an Verbraucher` substring (LAND-02),
- * reinforcing the dedicated B2BOnlyBand.
+ * The B2B line carries the verbatim `nicht an Verbraucher` substring (LAND-02).
+ * This full footer serves the legal pages; the one-screen landing uses the
+ * one-line LandingFooterBar.
  */
 export function Footer() {
   return (
@@ -31,15 +32,12 @@ export function Footer() {
           <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink">
             Product
           </h3>
-          {/* Absolute anchors (/#how, /#faq) — the footer also renders on the
-              legal pages, which don't have those section ids. */}
+          {/* The one-screen landing has no in-page sections, so "Product"
+              points home + to the single access funnel (D-02). */}
           <nav className="mt-3 flex flex-col gap-2">
-            <a href="/#how" className="transition hover:text-brand">
-              How it works
-            </a>
-            <a href="/#faq" className="transition hover:text-brand">
-              FAQ
-            </a>
+            <Link href="/" className="transition hover:text-brand">
+              Home
+            </Link>
             <a href="/signup" className="transition hover:text-brand">
               Request access
             </a>

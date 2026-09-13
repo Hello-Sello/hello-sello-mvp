@@ -73,36 +73,6 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
-/*
-  Landing aurora motion (Phase 9). Additive + decorative only. The floating
-  gradient blobs behind the public hero/CTA give the marketing pages their
-  "dreamy" depth without any JS or animation library. All motion is disabled
-  under prefers-reduced-motion.
-*/
-@keyframes hs-float-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(28px, -24px) scale(1.06); }
-  66% { transform: translate(-20px, 16px) scale(0.96); }
-}
-@keyframes hs-float-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-26px, 22px) scale(1.05); }
-}
-@keyframes hs-float-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(22px, 18px) scale(1.04); }
-}
-.hs-blob-a { animation: hs-float-a 18s ease-in-out infinite; }
-.hs-blob-b { animation: hs-float-b 22s ease-in-out infinite; }
-.hs-blob-c { animation: hs-float-c 20s ease-in-out infinite; }
-
-html { scroll-behavior: smooth; }
-
-@media (prefers-reduced-motion: reduce) {
-  .hs-blob-a, .hs-blob-b, .hs-blob-c { animation: none; }
-  html { scroll-behavior: auto; }
-}
-
 /* =====================================================================
    Deal card - paper-in-glass skin (07-07 final polish).
    Restyles the 8-part deal card to the deal-card-promo prototype's visual
@@ -282,234 +252,6 @@ html { scroll-behavior: smooth; }
 }
 
 /* =====================================================================
-   Hero deal-flow animation (landing hero - product-visual slot). [v2]
-   Redesigned so the Deal Card is the visual ANCHOR: a chat between two
-   people crystallises into a structured, denser Deal Card across a "//"
-   seam. Premium-motion rules - short beats, custom easing curves, exactly
-   ONE spring (spent on the seal). All classes/keyframes are `hdf-` scoped
-   so nothing leaks into the app; reuses the app brand + glass tokens.
-   Sample content + illustrated avatars are ILLUSTRATIVE only (D-06).
-   VISUAL only; behaviour lives in HeroDealFlow.tsx.
-   ===================================================================== */
-:root {
-  --hdf-ease: cubic-bezier(0.16, 1, 0.3, 1);   /* ease-out quart - entrances */
-  --hdf-eio: cubic-bezier(0.65, 0, 0.35, 1);   /* ease-in-out - morph/settle */
-  --hdf-fly: cubic-bezier(0.5, 0, 0.1, 1);     /* front-loaded - cross-seam travel */
-}
-
-.hdf-frame {
-  position: relative;
-  border-radius: 26px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(30px) saturate(175%);
-  -webkit-backdrop-filter: blur(30px) saturate(175%);
-  box-shadow:
-    0 70px 130px -46px color-mix(in srgb, var(--color-brand-deep) 46%, transparent),
-    0 14px 36px -16px color-mix(in srgb, var(--color-brand-deep) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
-}
-
-.hdf-chrome {
-  height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 18px;
-  border-bottom: 1px solid rgba(31, 32, 32, 0.06); background: rgba(255, 255, 255, 0.35);
-}
-.hdf-dot { width: 10px; height: 10px; border-radius: 50%; }
-.hdf-dot.a { background: var(--color-brand-soft); }
-.hdf-dot.b { background: color-mix(in srgb, var(--color-brand-soft) 70%, transparent); }
-.hdf-dot.c { background: color-mix(in srgb, var(--color-brand-soft) 50%, transparent); }
-
-.hdf-stage {
-  position: relative; aspect-ratio: 16 / 10; display: grid;
-  grid-template-columns: minmax(0, 0.92fr) 52px minmax(0, 1.08fr);
-  padding: 30px 34px; overflow: hidden;
-  /* a VERY light pink glass screen - near-white base with faint glows for depth,
-     so the chat + card clearly pop off it (feedback: screen bg should be very
-     very light pink, glass-morph computer-screen look) */
-  background:
-    radial-gradient(44% 54% at 84% 20%, color-mix(in srgb, var(--color-brand) 9%, transparent), transparent 60%),
-    radial-gradient(44% 50% at 99% 100%, color-mix(in srgb, #ffb083 20%, transparent), transparent 62%),
-    radial-gradient(48% 55% at 4% 26%, color-mix(in srgb, var(--color-brand-soft) 24%, transparent), transparent 60%),
-    linear-gradient(160deg, #fffbfd, #fff3f8);
-}
-.hdf-col { display: flex; flex-direction: column; min-height: 0; }
-.hdf-chat { justify-content: center; }
-.hdf-zone { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-ink-muted); margin: 0 4px 16px; }
-.hdf-cardwrap { justify-content: center; align-items: center; }
-
-/* chat */
-.hdf-msgs { display: flex; flex-direction: column; gap: 16px; }
-/* live auto-scrolling feed: newest pinned to the bottom, older messages drift up
-   and dissolve under the top fade (premium glass-screen look). Only applied when
-   the timeline animates - static/reduced-motion shows the full thread uncapped. */
-.hdf-msgs.scrolling {
-  max-height: 360px; min-height: 0; overflow: hidden; padding: 2px 2px 4px;
-  scroll-behavior: smooth;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 6px), transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 6px), transparent 100%);
-}
-.hdf-msgs.scrolling > .hdf-line:first-child { margin-top: auto; }
-.hdf-line {
-  display: flex; align-items: flex-end; gap: 11px; max-width: 84%;
-  opacity: 0; transform: translateY(10px) scale(0.97);
-  transition: opacity 0.36s var(--hdf-ease), transform 0.36s var(--hdf-ease);
-}
-.hdf-line.show { opacity: 1; transform: none; }
-.hdf-line.left { align-self: flex-start; }
-.hdf-line.right { align-self: flex-end; flex-direction: row-reverse; }
-.hdf-ava {
-  flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 3px 10px -5px color-mix(in srgb, var(--color-brand-deep) 28%, transparent);
-}
-.hdf-ava-svg { width: 100%; height: 100%; display: block; }
-.hdf-ava.gray { background: linear-gradient(180deg, #ffffff, #f1eff4); border: 1px solid rgba(255, 255, 255, 0.9); color: var(--color-ink); }
-.hdf-ava.pink {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-brand-soft) 70%, #fff), color-mix(in srgb, var(--color-brand) 26%, #fff));
-  border: 1px solid color-mix(in srgb, var(--color-brand) 30%, transparent); color: var(--color-brand-deep);
-}
-.hdf-bubwrap { display: flex; flex-direction: column; min-width: 0; }
-.hdf-line.right .hdf-bubwrap { align-items: flex-end; }
-.hdf-name { font-size: 11px; font-weight: 700; margin: 0 4px 4px; }
-.hdf-line.left .hdf-name { color: var(--color-ink-muted); }
-.hdf-line.right .hdf-name { color: var(--color-brand-deep); }
-.hdf-bubble {
-  position: relative; padding: 11px 15px; font-size: 15px; line-height: 1.45; border-radius: 18px;
-  border: none;
-  box-shadow: 0 6px 16px -14px color-mix(in srgb, var(--color-brand-deep) 34%, transparent);
-}
-/* theirs (Lena) - flat soft gray, no border - like the real chat bg-ink/5 */
-.hdf-line.left .hdf-bubble {
-  background: #f2f0f4;
-  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
-  border-bottom-left-radius: 6px;
-}
-/* mine (Marco) - flat LIGHT pink, no border - like the real chat bg-brand-soft/30 */
-.hdf-line.right .hdf-bubble {
-  background: color-mix(in srgb, var(--color-brand-soft) 34%, #fff);
-  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
-  border-bottom-right-radius: 6px;
-}
-.hdf-time { display: block; font-size: 10px; margin-top: 5px; opacity: 0.6; font-variant-numeric: tabular-nums; }
-
-/* the fact inside a sentence - just maroon text, NO highlight box (feedback: the box looked cheap) */
-.hdf-tok { font-weight: 700; color: var(--color-brand-deep); }
-
-.hdf-typing-dots { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
-.hdf-typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.35; animation: hdf-blink 1.1s infinite var(--hdf-eio); }
-.hdf-line.left .hdf-typing-dots i { color: var(--color-ink-muted); }
-.hdf-line.right .hdf-typing-dots i { color: var(--color-brand); }
-.hdf-typing-dots i:nth-child(2) { animation-delay: 0.16s; }
-.hdf-typing-dots i:nth-child(3) { animation-delay: 0.32s; }
-@keyframes hdf-blink { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
-
-/* // transform seam (slimmed) */
-.hdf-seam { position: relative; display: flex; align-items: center; justify-content: center; }
-.hdf-vline {
-  position: absolute; top: 6%; bottom: 6%; width: 2px; left: 50%; transform: translateX(-50%);
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-brand) 45%, transparent) 22%, color-mix(in srgb, var(--color-brand) 45%, transparent) 78%, transparent);
-  background-size: 100% 200%; animation: hdf-seamflow 3.4s linear infinite;
-}
-@keyframes hdf-seamflow { to { background-position: 0 -200%; } }
-/* a light beam that travels down the seam - the "//" from He//oSe//o, alive */
-.hdf-beam { position: absolute; left: 50%; top: 6%; width: 2px; height: 20%; transform: translateX(-50%); border-radius: 2px; background: linear-gradient(180deg, transparent, var(--color-brand), transparent); filter: blur(0.5px); animation: hdf-beam 3.4s var(--hdf-eio) infinite; }
-@keyframes hdf-beam { 0% { top: 2%; opacity: 0; } 15% { opacity: 0.9; } 85% { opacity: 0.9; } 100% { top: 78%; opacity: 0; } }
-.hdf-glow { position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--color-brand) 28%, transparent), transparent 70%); filter: blur(2px); animation: hdf-breathe 3.6s var(--hdf-eio) infinite; }
-@keyframes hdf-breathe { 0%, 100% { opacity: 0.32; transform: translate(-50%, -50%) scale(1); } 50% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.14); } }
-.hdf-slash {
-  position: relative; font-family: var(--font-mono), monospace; font-weight: 600; font-size: 16px; color: var(--color-brand);
-  background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-border); width: 34px; height: 34px; border-radius: 11px;
-  display: flex; align-items: center; justify-content: center; box-shadow: var(--glass-shadow);
-}
-.hdf-seam.pulse .hdf-glow { animation: hdf-seampulse 0.6s var(--hdf-ease); }
-.hdf-seam.pulse .hdf-slash { animation: hdf-slashkick 0.6s var(--hdf-ease); }
-@keyframes hdf-seampulse { 0% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); } 40% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.5); } 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); } }
-@keyframes hdf-slashkick { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.12); } }
-/* an expanding ring each time a fact crosses the seam */
-.hdf-ripple { position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 11px; border: 1.5px solid color-mix(in srgb, var(--color-brand) 55%, transparent); opacity: 0; pointer-events: none; }
-.hdf-ripple.go { animation: hdf-ripple 0.7s var(--hdf-ease); }
-@keyframes hdf-ripple { 0% { opacity: 0.6; transform: scale(0.9); } 100% { opacity: 0; transform: scale(2.6); } }
-
-/* deal card - the anchor */
-.hdf-card {
-  position: relative; width: 100%; max-width: 460px; border-radius: 24px; overflow: hidden;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.5));
-  backdrop-filter: blur(40px) saturate(190%); -webkit-backdrop-filter: blur(40px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow:
-    0 56px 100px -32px color-mix(in srgb, var(--color-brand-deep) 46%, transparent),
-    0 12px 30px -12px color-mix(in srgb, var(--color-brand-deep) 20%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  transition: box-shadow 0.3s var(--hdf-eio);
-}
-.hdf-card.impact { animation: hdf-impact 0.5s var(--hdf-ease); }
-@keyframes hdf-impact { 0% { transform: scale(1); } 35% { transform: scale(1.012); } 100% { transform: scale(1); } }
-.hdf-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 42%, rgba(255, 255, 255, 0.26) 50%, transparent 58%); pointer-events: none; }
-
-.hdf-ring { position: absolute; top: 44px; left: 50%; width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--color-brand) 50%, transparent); opacity: 0; pointer-events: none; }
-.hdf-ring.go { animation: hdf-ringout 0.62s var(--hdf-ease); }
-@keyframes hdf-ringout { 0% { opacity: 0.5; transform: scale(0.7); } 100% { opacity: 0; transform: scale(3.4); } }
-
-.hdf-cardhead { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 9%, transparent); background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08)); }
-.hdf-mark { font-style: italic; font-weight: 800; font-size: 22px; color: var(--color-brand); letter-spacing: -0.01em; }
-.hdf-status { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-muted); background: color-mix(in srgb, var(--color-ink-muted) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-ink-muted) 22%, transparent); border-radius: 999px; padding: 4px 11px; display: inline-flex; align-items: center; gap: 6px; }
-.hdf-status.sealed { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); border-color: color-mix(in srgb, var(--color-success) 32%, transparent); animation: hdf-seal 0.52s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.hdf-status.sealed::before { content: "\2713"; font-size: 11px; }
-@keyframes hdf-seal { 0% { transform: scale(1.25) rotate(-6deg); opacity: 0.4; } 55% { transform: scale(0.96) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
-
-.hdf-parties { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); }
-.hdf-party { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-.hdf-party-right { justify-content: flex-end; text-align: right; }
-.hdf-plabel { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-ink-muted); }
-.hdf-pname { font-size: 13.5px; font-weight: 700; color: var(--color-ink); }
-.hdf-arrow { color: var(--color-brand); font-size: 15px; font-weight: 700; align-self: center; }
-
-.hdf-rows { padding: 8px 20px 2px; }
-.hdf-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 11px 8px; margin: 0 -8px; border-radius: 9px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); transition: background 0.5s var(--hdf-eio); }
-.hdf-row.hit { background: color-mix(in srgb, var(--color-brand) 11%, transparent); }
-.hdf-k { font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-ink-muted); white-space: nowrap; }
-.hdf-v { font-size: 15px; font-weight: 600; color: var(--color-ink); text-align: right; }
-.hdf-v.num { font-family: var(--font-mono), monospace; font-weight: 500; font-variant-numeric: tabular-nums; }
-.hdf-v.hdf-empty { min-width: 64px; height: 13px; border-bottom: 1.5px dashed color-mix(in srgb, var(--color-brand) 32%, transparent); align-self: center; }
-.hdf-filled { display: inline-block; opacity: 0; transform: translateY(5px); }
-.hdf-filled.in { animation: hdf-fieldin 0.34s var(--hdf-ease) forwards; }
-@keyframes hdf-fieldin { to { opacity: 1; transform: none; } }
-.hdf-row.total { border-bottom: none; padding-top: 14px; margin-top: 2px; }
-.hdf-row.total .hdf-k { color: var(--color-ink); font-weight: 700; font-size: 12.5px; }
-.hdf-row.total .hdf-v { font-family: var(--font-mono), monospace; font-size: 30px; font-weight: 700; color: var(--color-brand-deep); font-variant-numeric: tabular-nums; transition: text-shadow 0.4s; }
-.hdf-row.total .hdf-v.glow { text-shadow: 0 0 20px color-mix(in srgb, var(--color-brand) 55%, transparent); }
-
-.hdf-foot { padding: 0 20px 16px; margin-top: 4px; font-size: 11.5px; color: var(--color-ink-muted); display: flex; align-items: center; gap: 7px; opacity: 0; transform: translateY(4px); transition: opacity 0.5s var(--hdf-ease), transform 0.5s var(--hdf-ease); }
-.hdf-foot.show { opacity: 1; transform: none; }
-.hdf-foot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); flex: none; }
-
-/* cross-seam chip - LIGHT pink (client feedback: the dark pink read poorly) */
-.hdf-flyer {
-  position: absolute; z-index: 30; pointer-events: none;
-  font-family: var(--font-mono), monospace; font-size: 12.5px; font-weight: 600; color: var(--color-brand-deep);
-  padding: 5px 11px; border-radius: 999px; white-space: nowrap;
-  background: color-mix(in srgb, var(--color-brand-soft) 85%, #fff);
-  border: 1px solid color-mix(in srgb, var(--color-brand) 22%, transparent);
-  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--color-brand) 42%, transparent);
-  transition: transform 0.66s var(--hdf-fly), opacity 0.35s var(--hdf-eio);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hdf-line, .hdf-foot, .hdf-flyer, .hdf-row, .hdf-filled, .hdf-card { transition: none; }
-  .hdf-vline, .hdf-beam, .hdf-glow, .hdf-typing-dots i { animation: none; }
-  .hdf-seam.pulse .hdf-glow, .hdf-seam.pulse .hdf-slash, .hdf-ripple.go, .hdf-status.sealed, .hdf-card.impact, .hdf-ring.go { animation: none; }
-}
-@media (max-width: 720px) {
-  .hdf-stage { grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); padding: 16px; }
-  .hdf-msgs.scrolling { max-height: 230px; }
-  .hdf-bubble { font-size: 13px; }
-  .hdf-ava { width: 32px; height: 32px; }
-  .hdf-row.total .hdf-v { font-size: 24px; }
-}
-
-/* =====================================================================
    PRODUCT FLIP CARD (landing §6 - premium product preview)
    A medical-cannabis product card that auto-flips front <-> back on a
    loop (pure CSS 3D, SSR-safe). Front = product + potency + price;
@@ -577,130 +319,148 @@ html { scroll-behavior: smooth; }
 .speclist-scroll > * { scroll-snap-align: start; }
 
 /* =====================================================================
-   DATA PROTECTION BAND (landing §7a - "How your data is protected")
-   Twelve gold EU stars on a circle around a pulsing lock. The ring turns
-   and each star counter-rotates at the same speed, so a star holds its
-   radius and stays upright while the circle moves. Pure CSS on
-   server-rendered markup (ADR 0010 D2) - no client island, no dependency.
-   Scoped `dpb-`, matching the hs-blob- / dc- / hdf- / pcard- convention.
-   FOUR colours here are literals, not design tokens - #1a0a2e and #3d0f26
-   (the gradient's aubergine/plum ends), #ffcc00 (EU flag gold) and #fff.
-   They are the prototype's palette and live nowhere but this block; only
-   --color-brand and --color-brand-deep below are real tokens.
+   ONE-SCREEN LANDING (lp-)
+   Ground, ticker, the deal-room window and its story loop. Pure CSS on
+   server-rendered markup, no client island.
+   ONE 12s clock drives everything in the window: the live column's
+   --lp-live goes 0 -> 1 (a registered custom property, so it tweens), and
+   every live-dependent style is a calc() of it; the title-bar segment for
+   that step fills; the product card flips once while column 1 is live, the
+   chat bubbles land while column 2 is live, the contact checks pop while
+   column 3 is live. Phase offsets are NEGATIVE animation-delays so every
+   element is inside its loop from the first frame (a positive delay would
+   flash the resting style before the animation starts).
+   Reduced motion: no movement, the window at rest, everything visible.
    ===================================================================== */
-.dpb-card {
-  background: linear-gradient(120deg, #1a0a2e 0%, var(--color-brand-deep) 55%, #3d0f26 100%);
+:root {
+  --lp-plum: #2a0b1a;       /* the deal-room window; damson, darkened, not tinted black */
+  --lp-plum-2: #35112b;
+  --lp-porcelain: #fbf7f9;  /* page ground - white with the brand's pink cast */
 }
 
-.dpb-ring {
-  /* --dpb-size and --dpb-inset are declared ONCE, here, and inherited by
-     .dpb-star and by @keyframes dpb-counter. That is what lets the 480px query
-     at the bottom of this block resize the whole ring by overriding one
-     property on one selector.
-     --dpb-inset is the gap between the ring edge and a star's centre. It is
-     read in TWO places that must agree - .dpb-star's resting transform and
-     dpb-counter's `to` frame - so it lives in one custom property rather than
-     as a magic number written twice. */
-  --dpb-size: 220px;
-  --dpb-inset: 14px;
-  position: relative;
-  width: var(--dpb-size);
-  height: var(--dpb-size);
-  margin: 0 auto;
-  animation: dpb-spin 44s linear infinite;
+.lp-display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  font-optical-sizing: auto;
 }
 
-.dpb-star {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 22px;
-  height: 22px;
-  margin: -11px 0 0 -11px;
-  color: #ffcc00; /* EU flag gold */
-  transform: rotate(var(--dpb-a))
-             translateY(calc(var(--dpb-size) / -2 + var(--dpb-inset)))
-             rotate(calc(-1 * var(--dpb-a)));
-  animation: dpb-counter 44s linear infinite;
+/* ground: porcelain, one raspberry light source behind the window, a faint
+   paper grain so the flat colour reads as material */
+.lp-ground { background: var(--lp-porcelain); }
+.lp-ground::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(52rem 34rem at 76% 48%, color-mix(in srgb, var(--color-brand) 13%, transparent), transparent 64%),
+    radial-gradient(40rem 26rem at 8% 6%, color-mix(in srgb, var(--color-brand-soft) 42%, transparent), transparent 62%);
+}
+.lp-ground::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0.045; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
-@keyframes dpb-spin {
-  to { transform: rotate(360deg); }
+/* ticker */
+.lp-ticker { background: var(--lp-plum); }
+.lp-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: lp-ticker 44s linear infinite;
+}
+@keyframes lp-ticker { to { transform: translateX(-50%); } }
+
+/* the window */
+.lp-window {
+  background: linear-gradient(160deg, var(--lp-plum-2) 0%, var(--lp-plum) 48%, #1e0812 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 40px 90px -30px color-mix(in srgb, var(--color-brand-deep) 60%, transparent),
+    0 18px 40px -22px rgba(30, 8, 18, 0.6);
 }
 
-/* `transform` is ONE property, so this keyframe cannot "add" a rotation to the
-   star's resting transform - it restates the whole rotate/translateY/rotate
-   chain with the extra -360deg. If this ever drifts from .dpb-star's transform
-   above, the stars spiral off the ring radius instead of holding it - and no
-   test catches that, because cases 18/19 read `animationName` only. Both the
-   radius (--dpb-size) and the inset (--dpb-inset) are therefore custom
-   properties, so the two copies cannot disagree about the geometry. */
-@keyframes dpb-counter {
-  to {
-    transform: rotate(var(--dpb-a))
-               translateY(calc(var(--dpb-size) / -2 + var(--dpb-inset)))
-               rotate(calc(-1 * var(--dpb-a) - 360deg));
-  }
+/* title-bar progress: three segments, each fills during its step */
+.lp-seg {
+  position: relative; display: block; width: 14px; height: 3px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14); overflow: hidden;
+}
+.lp-seg::after {
+  content: ""; position: absolute; inset: 0; border-radius: 3px;
+  background: var(--color-brand); transform-origin: left; transform: scaleX(0);
+  animation: 12s linear infinite;
+}
+.lp-seg[data-seg="1"]::after { animation-name: lp-seg-1; }
+.lp-seg[data-seg="2"]::after { animation-name: lp-seg-2; }
+.lp-seg[data-seg="3"]::after { animation-name: lp-seg-3; }
+@keyframes lp-seg-1 { 0% { transform: scaleX(0); } 33.3%, 100% { transform: scaleX(1); } }
+@keyframes lp-seg-2 { 0%, 33.3% { transform: scaleX(0); } 66.6%, 100% { transform: scaleX(1); } }
+@keyframes lp-seg-3 { 0%, 66.6% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+
+/* live column: one tweened number drives brightness, ring and number chip */
+@property --lp-live {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+.lp-col {
+  --lp-live: 0;
+  animation: lp-live 12s ease-in-out infinite;
+  opacity: calc(0.58 + 0.42 * var(--lp-live));
+  background: rgba(255, 255, 255, calc(0.055 * var(--lp-live)));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-brand) calc(var(--lp-live) * 45%), transparent),
+    0 24px 50px -30px color-mix(in srgb, var(--color-brand) calc(var(--lp-live) * 70%), transparent);
+}
+.lp-col[data-step="2"] { animation-delay: -8s; } /* live 4s-8s  */
+.lp-col[data-step="3"] { animation-delay: -4s; } /* live 8s-12s */
+@keyframes lp-live {
+  0%, 2%    { --lp-live: 0; }
+  7%, 30%   { --lp-live: 1; }
+  36%, 100% { --lp-live: 0; }
+}
+.lp-num {
+  color: rgba(255, 255, 255, calc(0.7 + 0.3 * var(--lp-live)));
+  background: color-mix(in srgb, var(--color-brand) calc(var(--lp-live) * 100%), rgba(255, 255, 255, 0.12));
 }
 
-/* Sized and shadowed from variant C's OWN override (index.html:206-210), not
-   from the prototype's generic `.ring .core` (index.html:158-163). C is the
-   locked variant, and the difference is load-bearing on a dark card: the
-   generic rule's --color-brand-deep shadow is near-invisible against the
-   aubergine, and the 10px gold halo is what visually ties the core to the
-   twelve EU stars around it. */
-.dpb-core {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 104px;
-  height: 104px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: radial-gradient(circle at 35% 30%, var(--color-brand), var(--color-brand-deep));
-  box-shadow: 0 20px 50px -14px rgba(0, 0, 0, 0.7), 0 0 0 10px rgba(255, 204, 0, 0.07);
-  /* Counter-rotates the ring, exactly as .dpb-star does. Without this the core
-     inherits the parent's spin and the padlock tumbles - on its side at 11s,
-     inverted at 22s - because a transform on a parent applies to its whole
-     subtree. The prototype counter-rotated the stars and missed the core, so
-     the tumble shipped there too (index.html:158-163); it is a reproduced
-     prototype bug, not a design choice. Safe to animate `transform` here: the
-     core is centred by `inset: 0; margin: auto`, NOT by a transform, so nothing
-     of its positioning is lost. Same 44s period and `linear` timing as the ring,
-     or the cancellation drifts. */
-  animation: dpb-counter-core 44s linear infinite;
+/* the product card flips once, while column 1 is live (overrides .pcard's own loop) */
+.lp-window .pcard-inner { animation: lp-cardflip 12s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@keyframes lp-cardflip {
+  0%, 9%    { transform: rotateY(0deg); }
+  16%, 25%  { transform: rotateY(180deg); }
+  32%, 100% { transform: rotateY(360deg); }
 }
 
-@keyframes dpb-counter-core {
-  to { transform: rotate(-360deg); }
+/* chat bubbles land while column 2 is live */
+.lp-bubble { animation: lp-bubble 12s ease-out infinite; }
+.lp-bubble:nth-child(2) { animation-delay: -11.1s; } /* +0.9s */
+.lp-bubble:nth-child(3) { animation-delay: -10.2s; } /* +1.8s */
+@keyframes lp-bubble {
+  0%, 36%   { opacity: 0; transform: translateY(6px); }
+  40%, 100% { opacity: 1; transform: none; }
 }
 
-.dpb-lock {
-  animation: dpb-pulse 3.4s ease-in-out infinite;
+/* contact checks pop while column 3 is live */
+.lp-check { animation: lp-check 12s ease-out infinite; }
+.lp-contact:nth-child(2) .lp-check { animation-delay: -11.2s; } /* +0.8s */
+.lp-contact:nth-child(3) .lp-check { animation-delay: -10.4s; } /* +1.6s */
+.lp-contact:nth-child(4) .lp-check { animation-delay: -9.6s; }  /* +2.4s */
+@keyframes lp-check {
+  0%, 69%   { opacity: 0; transform: scale(0.5); }
+  74%, 100% { opacity: 1; transform: scale(1); }
 }
 
-@keyframes dpb-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.09); }
+/* below lg the columns stack, so "which column is live" has no meaning: the
+   window sits at rest, every column bright, only the card keeps its own flip */
+@media (max-width: 63.99rem) {
+  .lp-seg::after, .lp-col, .lp-bubble, .lp-check { animation: none; }
+  .lp-col { --lp-live: 0.6; }
+  .lp-seg::after { transform: scaleX(1); }
+  .lp-window .pcard-inner { animation: pcard-flip 10s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
 }
-
-/* All FOUR animated selectors must be named. Stopping the ring alone leaves
-   twelve stars turning a full 360deg for a visitor who asked for no motion.
-   .dpb-core joined this list the moment it gained a counter-rotation - adding an
-   animation without adding it here is precisely the leak invariant M4 exists to
-   catch, and e2e cases 18/19 enumerate all four for that reason. */
 @media (prefers-reduced-motion: reduce) {
-  .dpb-ring, .dpb-star, .dpb-core, .dpb-lock { animation: none; }
+  .lp-ticker-track, .lp-seg::after, .lp-col, .lp-window .pcard-inner, .lp-bubble, .lp-check {
+    animation: none;
+  }
+  .lp-col { --lp-live: 0.6; }
+  .lp-seg::after { transform: scaleX(1); }
 }
-
-/* No mobile ring-shrink. An earlier draft carried
-   `@media (max-width: 480px) { .dpb-ring { --dpb-size: 168px } }`. It was
-   REMOVED after the G4 visual pass measured two things against it: (a) it was
-   never needed - at 375px the card's content box is 263px, so the full 220px
-   ring fits with 21px of slack each side and clips nothing; and (b) it was
-   actively harmful - only --dpb-size shrank, while .dpb-core stayed 104px and
-   the stars stayed 22px, so the ring-to-core gap went 23px -> MINUS 3px and the
-   stars overlapped the core's gold halo. It was also outside ADR 0010 §4's
-   authorised radius for this block. Variant C has no mobile query either. */
