@@ -77,8 +77,8 @@ export function StepsFlow() {
       </div>
 
       <p className="mt-4 max-w-[64ch] text-sm leading-relaxed text-ink-muted">
-        Emails, PDFs, Messages, Spreadsheets can be cancelled - the future is a
-        great network of contacts that chat and trade in one view.
+        No more emails, PDFs and spreadsheets flying around. Your contacts,
+        chats and deals live in one place.
       </p>
     </section>
   );

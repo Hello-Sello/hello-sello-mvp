@@ -346,7 +346,7 @@ test('one-screen copy: ticker, badges, verified line and caption render', async 
     page.getByText('Only verified companies (e.g. pharmacies and their partners).'),
   ).toBeVisible()
   await expect(
-    page.getByText('Emails, PDFs, Messages, Spreadsheets can be cancelled'),
+    page.getByText('Your contacts, chats and deals live in one place'),
   ).toBeVisible()
 })
 
@@ -373,7 +373,7 @@ for (const size of [
       page.locator('h1'),
       page.locator('main').getByRole('link', { name: /request access/i }),
       ...STEP_TITLES.map((t) => page.locator('#three-steps h3', { hasText: t })),
-      page.getByText('Emails, PDFs, Messages, Spreadsheets can be cancelled'),
+      page.getByText('Your contacts, chats and deals live in one place'),
       page.getByText('nicht an Verbraucher'),
     ]
     for (const el of landmarks) {
