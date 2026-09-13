@@ -19,8 +19,8 @@ import { CTAButton } from "./CTAButton";
  */
 export function LandingNav() {
   return (
-    <header className="sticky top-0 z-40 border-b border-ink/10 bg-surface/70 backdrop-blur-md">
-      <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
+    <header className="sticky top-0 z-40 shrink-0 border-b border-ink/[0.06] bg-surface/60 backdrop-blur-md">
+      <nav className="mx-auto flex max-w-[1400px] items-center gap-6 px-6 py-3 lg:px-10">
         <Link href="/" aria-label="Hello Sello home">
           <Wordmark />
         </Link>
@@ -33,7 +33,7 @@ export function LandingNav() {
             type="button"
             disabled
             aria-label="Language (German coming soon)"
-            className="rounded-full border border-ink/20 px-2.5 py-1 text-xs text-ink-muted"
+            className="rounded-full border border-ink/10 px-2.5 py-1 text-[11px] text-ink-muted/80"
           >
             EN ▾
           </button>

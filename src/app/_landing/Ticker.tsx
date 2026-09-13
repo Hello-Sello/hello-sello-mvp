@@ -17,8 +17,8 @@ function Line({ hidden = false }: { hidden?: boolean }) {
     <span className="flex shrink-0 items-center" aria-hidden={hidden || undefined}>
       {ITEMS.map((item) => (
         <span key={item} className="flex items-center">
-          <span className="px-6">{item}</span>
-          <span className="h-1.5 w-1.5 rounded-full bg-white/70" aria-hidden />
+          <span className="px-7">{item}</span>
+          <span className="h-1 w-1 rounded-full bg-brand" aria-hidden />
         </span>
       ))}
     </span>
@@ -27,8 +27,8 @@ function Line({ hidden = false }: { hidden?: boolean }) {
 
 export function Ticker() {
   return (
-    <div className="overflow-hidden bg-gradient-to-r from-brand to-brand-deep text-xs font-semibold tracking-wide text-white">
-      <div className="lp-ticker-track py-1.5">
+    <div className="lp-ticker shrink-0 overflow-hidden text-[11.5px] font-medium tracking-[0.01em] text-white/70">
+      <div className="lp-ticker-track py-[7px]">
         <Line />
         <Line hidden />
       </div>

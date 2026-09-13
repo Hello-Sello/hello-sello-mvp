@@ -73,36 +73,6 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
-/*
-  Landing aurora motion (Phase 9). Additive + decorative only. The floating
-  gradient blobs behind the public hero/CTA give the marketing pages their
-  "dreamy" depth without any JS or animation library. All motion is disabled
-  under prefers-reduced-motion.
-*/
-@keyframes hs-float-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(28px, -24px) scale(1.06); }
-  66% { transform: translate(-20px, 16px) scale(0.96); }
-}
-@keyframes hs-float-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-26px, 22px) scale(1.05); }
-}
-@keyframes hs-float-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(22px, 18px) scale(1.04); }
-}
-.hs-blob-a { animation: hs-float-a 18s ease-in-out infinite; }
-.hs-blob-b { animation: hs-float-b 22s ease-in-out infinite; }
-.hs-blob-c { animation: hs-float-c 20s ease-in-out infinite; }
-
-html { scroll-behavior: smooth; }
-
-@media (prefers-reduced-motion: reduce) {
-  .hs-blob-a, .hs-blob-b, .hs-blob-c { animation: none; }
-  html { scroll-behavior: auto; }
-}
-
 /* =====================================================================
    Deal card - paper-in-glass skin (07-07 final polish).
    Restyles the 8-part deal card to the deal-card-promo prototype's visual
@@ -349,56 +319,148 @@ html { scroll-behavior: smooth; }
 .speclist-scroll > * { scroll-snap-align: start; }
 
 /* =====================================================================
-   ONE-SCREEN LANDING (lp-) - the top ticker + the three-step story loop.
-   Pure CSS on server-rendered markup, no client island. ONE 12s loop
-   drives the three panels in turn (product card -> chat -> contacts) so
-   the story reads left to right: the live panel lifts and rings, the chat
-   bubbles land while panel 2 is live, the contact checks pop while panel
-   3 is live. Phase offsets are NEGATIVE animation-delays so every element
-   is inside its loop from the first frame (a positive delay would flash the
-   element's resting style before the animation starts).
-   Reduced motion: no movement, everything shown at rest (all visible).
+   ONE-SCREEN LANDING (lp-)
+   Ground, ticker, the deal-room window and its story loop. Pure CSS on
+   server-rendered markup, no client island.
+   ONE 12s clock drives everything in the window: the live column's
+   --lp-live goes 0 -> 1 (a registered custom property, so it tweens), and
+   every live-dependent style is a calc() of it; the title-bar segment for
+   that step fills; the product card flips once while column 1 is live, the
+   chat bubbles land while column 2 is live, the contact checks pop while
+   column 3 is live. Phase offsets are NEGATIVE animation-delays so every
+   element is inside its loop from the first frame (a positive delay would
+   flash the resting style before the animation starts).
+   Reduced motion: no movement, the window at rest, everything visible.
    ===================================================================== */
+:root {
+  --lp-plum: #2a0b1a;       /* the deal-room window; damson, darkened, not tinted black */
+  --lp-plum-2: #35112b;
+  --lp-porcelain: #fbf7f9;  /* page ground - white with the brand's pink cast */
+}
+
+.lp-display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+/* ground: porcelain, one raspberry light source behind the window, a faint
+   paper grain so the flat colour reads as material */
+.lp-ground { background: var(--lp-porcelain); }
+.lp-ground::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(52rem 34rem at 76% 48%, color-mix(in srgb, var(--color-brand) 13%, transparent), transparent 64%),
+    radial-gradient(40rem 26rem at 8% 6%, color-mix(in srgb, var(--color-brand-soft) 42%, transparent), transparent 62%);
+}
+.lp-ground::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0.045; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* ticker */
+.lp-ticker { background: var(--lp-plum); }
 .lp-ticker-track {
   display: flex;
   width: max-content;
-  animation: lp-ticker 40s linear infinite;
+  animation: lp-ticker 44s linear infinite;
 }
 @keyframes lp-ticker { to { transform: translateX(-50%); } }
 
-.lp-step { animation: lp-step 12s ease-in-out infinite; }
-.lp-step[data-step="2"] { animation-delay: -8s; } /* live 4s-8s  */
-.lp-step[data-step="3"] { animation-delay: -4s; } /* live 8s-12s */
-@keyframes lp-step {
-  0%, 36%, 100% {
-    transform: none;
-    box-shadow: 0 0 0 1px transparent, var(--glass-shadow);
-  }
-  4%, 30% {
-    transform: translateY(-4px);
-    box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--color-brand) 55%, transparent),
-      0 28px 60px -28px color-mix(in srgb, var(--color-brand-deep) 50%, transparent);
-  }
+/* the window */
+.lp-window {
+  background: linear-gradient(160deg, var(--lp-plum-2) 0%, var(--lp-plum) 48%, #1e0812 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 40px 90px -30px color-mix(in srgb, var(--color-brand-deep) 60%, transparent),
+    0 18px 40px -22px rgba(30, 8, 18, 0.6);
 }
 
+/* title-bar progress: three segments, each fills during its step */
+.lp-seg {
+  position: relative; display: block; width: 14px; height: 3px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14); overflow: hidden;
+}
+.lp-seg::after {
+  content: ""; position: absolute; inset: 0; border-radius: 3px;
+  background: var(--color-brand); transform-origin: left; transform: scaleX(0);
+  animation: 12s linear infinite;
+}
+.lp-seg[data-seg="1"]::after { animation-name: lp-seg-1; }
+.lp-seg[data-seg="2"]::after { animation-name: lp-seg-2; }
+.lp-seg[data-seg="3"]::after { animation-name: lp-seg-3; }
+@keyframes lp-seg-1 { 0% { transform: scaleX(0); } 33.3%, 100% { transform: scaleX(1); } }
+@keyframes lp-seg-2 { 0%, 33.3% { transform: scaleX(0); } 66.6%, 100% { transform: scaleX(1); } }
+@keyframes lp-seg-3 { 0%, 66.6% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+
+/* live column: one tweened number drives brightness, ring and number chip */
+@property --lp-live {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+.lp-col {
+  --lp-live: 0;
+  animation: lp-live 12s ease-in-out infinite;
+  opacity: calc(0.58 + 0.42 * var(--lp-live));
+  background: rgba(255, 255, 255, calc(0.055 * var(--lp-live)));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-brand) calc(var(--lp-live) * 45%), transparent),
+    0 24px 50px -30px color-mix(in srgb, var(--color-brand) calc(var(--lp-live) * 70%), transparent);
+}
+.lp-col[data-step="2"] { animation-delay: -8s; } /* live 4s-8s  */
+.lp-col[data-step="3"] { animation-delay: -4s; } /* live 8s-12s */
+@keyframes lp-live {
+  0%, 2%    { --lp-live: 0; }
+  7%, 30%   { --lp-live: 1; }
+  36%, 100% { --lp-live: 0; }
+}
+.lp-num {
+  color: rgba(255, 255, 255, calc(0.7 + 0.3 * var(--lp-live)));
+  background: color-mix(in srgb, var(--color-brand) calc(var(--lp-live) * 100%), rgba(255, 255, 255, 0.12));
+}
+
+/* the product card flips once, while column 1 is live (overrides .pcard's own loop) */
+.lp-window .pcard-inner { animation: lp-cardflip 12s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@keyframes lp-cardflip {
+  0%, 9%    { transform: rotateY(0deg); }
+  16%, 25%  { transform: rotateY(180deg); }
+  32%, 100% { transform: rotateY(360deg); }
+}
+
+/* chat bubbles land while column 2 is live */
 .lp-bubble { animation: lp-bubble 12s ease-out infinite; }
 .lp-bubble:nth-child(2) { animation-delay: -11.1s; } /* +0.9s */
 .lp-bubble:nth-child(3) { animation-delay: -10.2s; } /* +1.8s */
 @keyframes lp-bubble {
-  0%, 35%   { opacity: 0; transform: translateY(6px); }
-  39%, 100% { opacity: 1; transform: none; }
+  0%, 36%   { opacity: 0; transform: translateY(6px); }
+  40%, 100% { opacity: 1; transform: none; }
 }
 
+/* contact checks pop while column 3 is live */
 .lp-check { animation: lp-check 12s ease-out infinite; }
 .lp-contact:nth-child(2) .lp-check { animation-delay: -11.2s; } /* +0.8s */
 .lp-contact:nth-child(3) .lp-check { animation-delay: -10.4s; } /* +1.6s */
 .lp-contact:nth-child(4) .lp-check { animation-delay: -9.6s; }  /* +2.4s */
 @keyframes lp-check {
-  0%, 68%   { opacity: 0; transform: scale(0.5); }
-  73%, 100% { opacity: 1; transform: scale(1); }
+  0%, 69%   { opacity: 0; transform: scale(0.5); }
+  74%, 100% { opacity: 1; transform: scale(1); }
 }
 
+/* below lg the columns stack, so "which column is live" has no meaning: the
+   window sits at rest, every column bright, only the card keeps its own flip */
+@media (max-width: 63.99rem) {
+  .lp-seg::after, .lp-col, .lp-bubble, .lp-check { animation: none; }
+  .lp-col { --lp-live: 0.6; }
+  .lp-seg::after { transform: scaleX(1); }
+  .lp-window .pcard-inner { animation: pcard-flip 10s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lp-ticker-track, .lp-step, .lp-bubble, .lp-check { animation: none; }
+  .lp-ticker-track, .lp-seg::after, .lp-col, .lp-window .pcard-inner, .lp-bubble, .lp-check {
+    animation: none;
+  }
+  .lp-col { --lp-live: 0.6; }
+  .lp-seg::after { transform: scaleX(1); }
 }

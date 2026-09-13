@@ -10,8 +10,8 @@ import { CookieSettingsButton } from "./CookieSettingsButton";
  */
 export function LandingFooterBar() {
   return (
-    <footer className="border-t border-ink/10 px-6 py-3 text-xs text-ink-muted">
-      <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 sm:flex-row sm:justify-between">
+    <footer className="shrink-0 border-t border-ink/[0.08] px-6 py-3 text-xs text-ink-muted lg:px-10">
+      <div className="mx-auto flex max-w-[1400px] flex-col items-center gap-2 sm:flex-row sm:justify-between">
         <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
           <Link href="/impressum" className="transition hover:text-brand">
             Impressum
@@ -24,9 +24,10 @@ export function LandingFooterBar() {
           </Link>
           <CookieSettingsButton />
         </nav>
-        <p className="text-center">
-          Hello Sello ist eine B2B-Plattform - nicht an Verbraucher. · © 2026 Hello Sello
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1">
+          <p>Hello Sello ist eine B2B-Plattform - nicht an Verbraucher.</p>
+          <p>© 2026 Hello Sello</p>
+        </div>
       </div>
     </footer>
   );
