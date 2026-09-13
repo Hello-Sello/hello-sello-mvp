@@ -408,14 +408,27 @@ test('retired sections absent: no #what-you-can-do, #how, #faq, #data-protection
 // Case 21 — 375px viewport produces no horizontal scroll (the phone layout
 // stacks and scrolls vertically; sideways overflow is the regression).
 // ---------------------------------------------------------------------------
-test('mobile overflow: 375px viewport produces no horizontal scroll', async ({ page, context }) => {
+test('mobile overflow: 375px viewport, no element wider than the screen', async ({ page, context }) => {
   await context.clearCookies()
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/')
 
-  const overflow = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }))
-  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth)
+  // Measure every element's right edge, not document.scrollWidth: the page
+  // wrapper is overflow-hidden, so a too-wide grid column is clipped, not
+  // scrolled, and scrollWidth stays innocent (it did, at 411px on 390px).
+  // The ticker is excluded by design - its track is a max-content marquee.
+  const widest = await page.evaluate(() => {
+    let worst = { right: 0, tag: '' }
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.closest('.lp-ticker')) continue
+      const r = el.getBoundingClientRect()
+      if (r.width > 0 && r.right > worst.right) {
+        worst = { right: Math.round(r.right), tag: `${el.tagName.toLowerCase()}.${el.className}` }
+      }
+    }
+    return { ...worst, viewport: window.innerWidth }
+  })
+  expect(widest.right, `${widest.tag} spills past the viewport`).toBeLessThanOrEqual(
+    widest.viewport + 1,
+  )
 })
