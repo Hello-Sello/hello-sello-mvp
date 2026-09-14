@@ -19,13 +19,9 @@ import type { BasketGroup, BasketLine } from "../types";
 
 /**
  * The compact dropdown that replaced the full-height slide-in drawer (locked
- * design: prototypes/basket-popover-prototype). Rendered by TopBar INSIDE the
- * `relative` wrapper around the basket icon, so the `absolute` positioning
- * below anchors directly to that icon - no portal, no getBoundingClientRect
- * math, just CSS. TopBar owns the open/close toggle + the click-catcher
- * backdrop (mirrors ConversationList's `NewMenu`, the closest existing analog
- * for "small anchored dropdown under a trigger button"); this component only
- * renders the panel and returns null while closed.
+ * design: prototypes/basket-popover-prototype). TopBar places it under the
+ * basket icon through AnchoredPopover, which also owns the click-catcher and
+ * Escape; this component only renders the panel and returns null while closed.
  *
  * D-14: the drawer has TWO sides - Product Basket (the existing persistent
  * products, no recipient needed) | Deal Basket (unsent draft deal cards from
@@ -62,7 +58,7 @@ export function BasketDrawer() {
     <div
       role="menu"
       aria-label="Your basket"
-      className="glass-strong absolute right-0 top-[calc(100%+10px)] z-50 w-80 max-w-[92vw] rounded-2xl p-3.5 shadow-2xl"
+      className="glass-strong relative w-80 max-w-[92vw] rounded-2xl p-3.5 shadow-2xl"
     >
       {/* caret pointing back up at the icon - two edges only (top+left) so the
           panel's own opaque background covers the overlapping half, per the

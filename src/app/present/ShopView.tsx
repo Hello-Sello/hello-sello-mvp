@@ -44,6 +44,7 @@ import { packSizes } from "@/modules/catalog/index.client";
 import { saveCompanyProfile } from "@/app/account/actions";
 import { requestProductPricing } from "@/app/discover/actions";
 import { createClient } from "@/shared/db/client";
+import { externalUrl } from "@/shared/utils/externalUrl";
 import { addToBasket, useBasket } from "@/modules/basket";
 import { AddProductsDrawer } from "./AddProductsDrawer";
 import { AssignProductsDialog } from "./AssignProductsDialog";
@@ -887,16 +888,18 @@ function ShopInfoRow({
   onEdit: <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => void;
 }) {
   const hq = company.address || company.country || "—";
+  const websiteHref = externalUrl(company.website);
 
   const links = (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      {company.website && <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />}
-      {company.links.map((l, i) => (
-        <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
-      ))}
+      {websiteHref && <LinkRow icon={<Globe size={16} />} label="Website" url={websiteHref} />}
+      {company.links.map((l, i) => {
+        const href = linkHref(l);
+        return href ? <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={href} /> : null;
+      })}
     </div>
   );
-  const hasAnyLink = Boolean(company.website) || company.links.length > 0;
+  const hasAnyLink = Boolean(websiteHref) || company.links.some((l) => linkHref(l));
 
   return (
     <div className="grid grid-cols-1 items-stretch gap-2.5 lg:grid-cols-3">
@@ -1076,10 +1079,11 @@ function linkIcon(platform: ShopLink["platform"]) {
   if (platform === "x") return <BrandGlyph name="x" size={16} />;
   return <Link2 size={16} />;
 }
-function linkHref(l: ShopLink) {
+/** The link's href, or null when its value isn't a web address (see externalUrl). */
+function linkHref(l: ShopLink): string | null {
   if (l.platform === "instagram") return `https://instagram.com/${l.value}`;
   if (l.platform === "x") return `https://x.com/${l.value}`;
-  return l.value; // linkedin / custom carry a full URL
+  return externalUrl(l.value); // linkedin / custom: typed by a person, often without https://
 }
 function linkLabel(l: ShopLink) {
   if (l.platform === "instagram" || l.platform === "x") return `@${l.value}`;
