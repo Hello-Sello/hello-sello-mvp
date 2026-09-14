@@ -4,7 +4,8 @@
  * The Present card BACK — "Documents & media". A reusable manager that renders a
  * product's front-of-card media (gallery images + external video links) as a
  * drag-sortable grid, and its back-of-card documents (COA / custom-doc PDFs) as
- * download folders. In edit mode (owner + a companyId) it also uploads, deletes,
+ * folders whose rows open the PDF in MediaLightbox (Download lives there). In
+ * edit mode (owner + a companyId) it also uploads, deletes,
  * reorders, and pastes video links; without edit rights it is a read-only
  * view+download surface (buyer view, present mode).
  *
@@ -24,7 +25,7 @@
  */
 import { useRef, useState } from "react";
 import {
-  FileText, X, Download, Plus, Play, ChevronRight, Loader2, BarChart2, UploadCloud,
+  FileText, X, Download, Plus, Play, ChevronRight, Loader2, BarChart2, UploadCloud, Eye,
 } from "lucide-react";
 import type { ShopProduct, ProductImage, ProductMedia } from "../shop";
 import { createClient } from "@/shared/db/client";
@@ -36,6 +37,8 @@ import {
   removeProductMedia,
 } from "../manage";
 import { DocUploadModal } from "./DocUploadModal";
+import { MediaLightbox } from "./MediaLightbox";
+import { triggerDownload } from "./download";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 /** Public URL for a `shop-media` storage path (same builder as ShopView). */
@@ -56,21 +59,6 @@ const PDF_TYPE = "application/pdf";
 
 /** The last path segment, used as a human filename for downloads. */
 const baseName = (path: string) => path.split("/").pop() || path;
-
-/** fetch→blob→native `<a download>` so a cross-origin bucket file downloads
- *  instead of navigating (the `download` attr alone is ignored cross-origin). */
-async function triggerDownload(url: string, filename: string): Promise<void> {
-  const res = await fetch(url);
-  const blob = await res.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = objectUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(objectUrl);
-}
 
 export function MediaManager({
   product: p,
@@ -468,8 +456,9 @@ export function MediaManager({
   );
 }
 
-/** One collapsible document folder (COA or custom). Each row downloads its PDF;
- *  in edit mode a row can be removed. An empty folder shows a muted placeholder. */
+/** One collapsible document folder (COA or custom). A row opens its PDF in the
+ *  full-screen viewer, where the Download button lives; in edit mode a row can be
+ *  removed. An empty folder shows a muted placeholder. */
 function DocFolder({
   title,
   subtitle,
@@ -484,6 +473,9 @@ function DocFolder({
   onDelete: (m: ProductMedia) => void;
 }) {
   const [open, setOpen] = useState(true);
+  // Index into `items` of the document open in the viewer; null when closed.
+  const [viewing, setViewing] = useState<number | null>(null);
+  const docName = (m: ProductMedia) => m.label || baseName(m.path ?? "");
   return (
     <div className="overflow-hidden rounded-xl border border-ink/10 bg-ink/[0.02]">
       <button
@@ -506,27 +498,21 @@ function DocFolder({
           {items.length === 0 ? (
             <p className="px-3.5 py-2 text-[10px] text-ink/40">No files yet.</p>
           ) : (
-            items.map((m) => (
+            items.map((m, i) => (
               <div
                 key={m.id}
                 className="flex items-center gap-2 border-t border-ink/5 px-3.5 py-2 first:border-t-0"
               >
-                <a
-                  href={m.path ? mediaUrl(m.path) : "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => {
-                    if (!m.path) return;
-                    e.preventDefault();
-                    void triggerDownload(mediaUrl(m.path), m.label || baseName(m.path));
-                  }}
-                  aria-label={`Download ${m.label || "document"}`}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-ink hover:text-brand-deep"
+                <button
+                  type="button"
+                  onClick={() => setViewing(i)}
+                  aria-label={`Open ${docName(m)}`}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left text-ink hover:text-brand-deep"
                 >
-                  <span className="truncate text-[11.5px] font-medium">{m.label || baseName(m.path ?? "")}</span>
+                  <span className="truncate text-[11.5px] font-medium">{docName(m)}</span>
                   <small className="text-[8px] uppercase tracking-wide text-ink/40">PDF</small>
-                  <Download size={12} className="ml-auto shrink-0 text-ink/40" />
-                </a>
+                  <Eye size={12} className="ml-auto shrink-0 text-ink/40" />
+                </button>
                 {canEdit && (
                   <button
                     type="button"
@@ -541,6 +527,13 @@ function DocFolder({
             ))
           )}
         </div>
+      )}
+      {viewing !== null && (
+        <MediaLightbox
+          items={items.map((m) => ({ kind: "pdf" as const, src: mediaUrl(m.path ?? ""), title: docName(m) }))}
+          startIndex={viewing}
+          onClose={() => setViewing(null)}
+        />
       )}
     </div>
   );

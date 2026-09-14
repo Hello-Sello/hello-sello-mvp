@@ -26,7 +26,7 @@ import {
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
   MessageSquareQuote, Check,
 } from "lucide-react";
-import { ImageHoverPreview } from "./ImageHoverPreview";
+import { MediaLightbox } from "./MediaLightbox";
 import type { ShopProduct } from "../shop";
 import { packSizes, resolveTierPrice } from "../pricing";
 import { ladderRows } from "../ladderPanel";
@@ -290,44 +290,6 @@ export function ProductCard({
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  // Measured at the moment it opens, never during render — reading a ref
-  // while rendering is unsound (the DOM may not match the render yet).
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-  // Hover-zoom timers. Opening is delayed so sweeping the mouse across the grid
-  // does not strobe a full-size photo for every card it crosses; closing is
-  // delayed so the pointer can cross the gap from the card to the enlarged photo
-  // without it vanishing on the way (WCAG 1.4.13 "hoverable"). Neither timer
-  // ever closes an OPEN preview on its own — that would break "persistent".
-  // The photo frame, measured when the preview opens so the panel can sit
-  // flush against it rather than in the middle of the screen.
-  const photoRef = useRef<HTMLDivElement | null>(null);
-  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function cancelTimers() {
-    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
-    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
-  }
-  function zoomIn() {
-    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
-    if (lightboxOpen || openTimer.current) return;
-    openTimer.current = setTimeout(() => {
-      openTimer.current = null;
-      setAnchorRect(photoRef.current?.getBoundingClientRect() ?? null);
-      setLightboxOpen(true);
-    }, 350);
-  }
-  /** Open immediately (click / Enter), measuring the frame first. */
-  function openNow() {
-    setAnchorRect(photoRef.current?.getBoundingClientRect() ?? null);
-    setLightboxOpen(true);
-  }
-  function zoomOut() {
-    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
-    if (closeTimer.current) return;
-    closeTimer.current = setTimeout(() => { closeTimer.current = null; setLightboxOpen(false); }, 180);
-  }
-  useEffect(() => cancelTimers, []);
   const [busy, setBusy] = useState(false);
   // Full-field edit dialog (edit mode): the same spec rows as the inline scroll
   // list, laid out full-size — feedback was that the cramped inline inputs are
@@ -531,45 +493,27 @@ export function ProductCard({
               .pc-photo max-height) so the fixed-height card keeps ~294px for the
               spec rows below — without the cap the square image swallows the card
               and the spec list collapses to ~0px (object-cover crops the overflow). */}
-          {lightboxOpen && cover && (
-            <ImageHoverPreview
-              src={cover}
-              alt={p.cultivar ?? p.name}
-              count={images.length}
-              position={idx + 1}
-              anchor={anchorRect}
-              onPrev={() => setImgIdx((i) => i - 1)}
-              onNext={() => setImgIdx((i) => i + 1)}
-              onClose={() => { cancelTimers(); setLightboxOpen(false); }}
-              onPointerEnter={zoomIn}
-              onPointerLeave={zoomOut}
-            />
-          )}
           <div
-            ref={photoRef}
             data-testid="card-photo"
             className={`relative aspect-square max-h-[250px] w-full shrink-0 overflow-hidden bg-brand-soft/40 ${
               cover && !editing ? "cursor-zoom-in" : ""
             }`}
-            // Hover is the trigger Marcel asked for, but never the only one:
-            // focus opens it for keyboard users and click for touch, where hover
-            // does not exist at all. Edit mode keeps the frame inert — the drag
-            // grip and delete tools live in this same corner.
+            // Click opens the full-screen viewer; Enter/Space do the same from the
+            // keyboard. Edit mode keeps the frame inert — the drag grip and delete
+            // tools live in this same corner.
             {...(cover && !editing
               ? {
                   role: "button" as const,
                   tabIndex: 0,
                   "aria-label": `View ${p.cultivar ?? p.name} full size`,
-                  onMouseEnter: zoomIn,
-                  onMouseLeave: zoomOut,
-                  onFocus: zoomIn,
-                  onBlur: zoomOut,
-                  onClick: () => { cancelTimers(); openNow(); },
+                  onClick: () => setLightboxOpen(true),
                   onKeyDown: (e: React.KeyboardEvent) => {
+                    // Only a key pressed ON the frame: Enter on the heart or
+                    // "Docs & media" inside it belongs to that button.
+                    if (e.target !== e.currentTarget) return;
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      cancelTimers();
-                      openNow();
+                      setLightboxOpen(true);
                     }
                   },
                 }
@@ -683,7 +627,9 @@ export function ProductCard({
                 <button
                   type="button"
                   aria-label={liked ? "Unlike" : "Like"}
-                  onClick={() => setLiked((v) => !v)}
+                  // stopPropagation on both buttons in the photo frame: the
+                  // frame's own click opens the full-screen viewer.
+                  onClick={(e) => { e.stopPropagation(); setLiked((v) => !v); }}
                   className={`absolute right-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full ${
                     liked ? "bg-brand text-white" : "bg-white/90 text-brand"
                   }`}
@@ -694,7 +640,7 @@ export function ProductCard({
             )}
             <button
               type="button"
-              onClick={() => setFlipped(true)}
+              onClick={(e) => { e.stopPropagation(); setFlipped(true); }}
               className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1.5 rounded-full bg-ink/55 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur hover:bg-ink/80"
             >
               <RotateCw size={12} /> Docs &amp; media
@@ -1090,6 +1036,13 @@ export function ProductCard({
         </div>
       </div>
     </div>
+    {lightboxOpen && hasImages && (
+      <MediaLightbox
+        items={images.map((im) => ({ kind: "image" as const, src: mediaUrl(im.path), alt: p.cultivar ?? p.name }))}
+        startIndex={idx}
+        onClose={() => setLightboxOpen(false)}
+      />
+    )}
     {editing && detailsOpen && (
       <ProductDetailsDialog
         product={p}
