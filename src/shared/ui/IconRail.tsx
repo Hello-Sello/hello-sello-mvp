@@ -18,6 +18,7 @@ import { Wordmark } from "./Wordmark";
 import { Avatar } from "./Avatar";
 import { getAccountCard, type AccountCard } from "./account-card";
 import { usePersistedCollapse } from "./use-persisted-collapse";
+import { AnchoredPopover } from "./AnchoredPopover";
 
 /**
  * The single global navigation rail (F2). A light glass capsule that holds, top
@@ -236,9 +237,11 @@ function AccordionSurface({
 
   // Highlight the parent when collapsed-and-on-route (no inline tree to show it).
   const parentActive = onSurfaceRoute;
+  const rowRef = useRef<HTMLDivElement>(null);
 
   return (
     <div
+      ref={rowRef}
       className="relative"
       onMouseEnter={showFlyout}
       onMouseLeave={scheduleHideFlyout}
@@ -326,12 +329,15 @@ function AccordionSurface({
 
       {/* flyout popover (collapsed rail) */}
       {collapsed && flyoutOpen && (
-        <div
+        <AnchoredPopover
+          anchorRef={rowRef}
+          placement="right-start"
+          offset={12}
           role="menu"
           aria-label={surface.label}
           onMouseEnter={showFlyout}
           onMouseLeave={scheduleHideFlyout}
-          className="glass-strong absolute left-full top-0 z-50 ml-3 min-w-[200px] rounded-2xl p-2"
+          className="glass-strong min-w-[200px] rounded-2xl p-2"
         >
           <p className="px-2.5 pb-2 pt-1 text-[11px] font-bold uppercase tracking-widest text-ink-muted">
             {surface.label}
@@ -344,7 +350,7 @@ function AccordionSurface({
               onNavigate={() => setFlyoutOpen(false)}
             />
           ))}
-        </div>
+        </AnchoredPopover>
       )}
     </div>
   );
@@ -441,6 +447,7 @@ function Tooltip({
 function AccountCardSlot({ collapsed }: { collapsed: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [card, setCard] = useState<AccountCard>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
 
   // Load the card once on mount (server action — keeps profile reads server-side).
   useEffect(() => {
@@ -448,7 +455,7 @@ function AccountCardSlot({ collapsed }: { collapsed: boolean }) {
   }, []);
 
   return (
-    <div className="relative mt-3 border-t border-black/5 pt-3">
+    <div ref={slotRef} className="relative mt-3 border-t border-black/5 pt-3">
       <button
         type="button"
         onClick={() => setMenuOpen((open) => !open)}
@@ -492,51 +499,52 @@ function AccountCardSlot({ collapsed }: { collapsed: boolean }) {
       </button>
 
       {menuOpen && (
-        <>
-          {/* click-away backdrop + card sit ABOVE any in-page stacking context
-              (the Present About InfoBox is relative z-30 and would otherwise paint
-              over this popup). Matches the collapsed-rail nav flyout at z-50. */}
-          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-          <div className="glass-strong absolute bottom-0 left-full z-50 ml-2 w-72 rounded-3xl p-5 text-center">
-            {card && (
-              <>
-                <div className="flex justify-center">
-                  <Avatar url={card.avatarUrl} name={card.displayName} size={64} />
-                </div>
-                <h3 className="mt-3 text-base font-bold text-ink">{card.displayName}</h3>
-                {card.title && <p className="text-sm text-ink-muted">{card.title}</p>}
-                {card.companyName && (
-                  <span className="mt-2 inline-block rounded-full border border-brand/40 px-3 py-0.5 text-xs font-semibold text-brand">
-                    {card.companyName}
-                  </span>
-                )}
-                {card.qrSvg && (
-                  <>
-                    <div
-                      className="mx-auto mt-4 w-fit rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5 [&>svg]:h-[104px] [&>svg]:w-[104px]"
-                      dangerouslySetInnerHTML={{ __html: card.qrSvg }}
-                    />
-                    <p className="mt-1.5 text-[10px] font-medium tracking-widest text-ink-muted">SCAN TO CONNECT</p>
-                  </>
-                )}
-              </>
-            )}
+        <AnchoredPopover
+          anchorRef={slotRef}
+          placement="right-end"
+          offset={8}
+          onClose={() => setMenuOpen(false)}
+          data-testid="account-popover"
+          className="glass-strong w-72 rounded-3xl p-5 text-center"
+        >
+          {card && (
+            <>
+              <div className="flex justify-center">
+                <Avatar url={card.avatarUrl} name={card.displayName} size={64} />
+              </div>
+              <h3 className="mt-3 text-base font-bold text-ink">{card.displayName}</h3>
+              {card.title && <p className="text-sm text-ink-muted">{card.title}</p>}
+              {card.companyName && (
+                <span className="mt-2 inline-block rounded-full border border-brand/40 px-3 py-0.5 text-xs font-semibold text-brand">
+                  {card.companyName}
+                </span>
+              )}
+              {card.qrSvg && (
+                <>
+                  <div
+                    className="mx-auto mt-4 w-fit rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5 [&>svg]:h-[104px] [&>svg]:w-[104px]"
+                    dangerouslySetInnerHTML={{ __html: card.qrSvg }}
+                  />
+                  <p className="mt-1.5 text-[10px] font-medium tracking-widest text-ink-muted">SCAN TO CONNECT</p>
+                </>
+              )}
+            </>
+          )}
 
-            <div className="mt-4 space-y-1 border-t border-black/5 pt-3 text-left">
-              <MenuLink href="/settings/profile" icon={User} label="My Profile" onClick={() => setMenuOpen(false)} />
-              <MenuLink href="/settings/organization/profile" icon={Building2} label="Company Profile" onClick={() => setMenuOpen(false)} />
-              <MenuLink href="/settings" icon={Settings} label="Settings" onClick={() => setMenuOpen(false)} />
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-brand transition hover:bg-black/[0.04] motion-reduce:transition-none"
-                >
-                  <LogOut size={16} strokeWidth={1.75} /> Sign out
-                </button>
-              </form>
-            </div>
+          <div className="mt-4 space-y-1 border-t border-black/5 pt-3 text-left">
+            <MenuLink href="/settings/profile" icon={User} label="My Profile" onClick={() => setMenuOpen(false)} />
+            <MenuLink href="/settings/organization/profile" icon={Building2} label="Company Profile" onClick={() => setMenuOpen(false)} />
+            <MenuLink href="/settings" icon={Settings} label="Settings" onClick={() => setMenuOpen(false)} />
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-brand transition hover:bg-black/[0.04] motion-reduce:transition-none"
+              >
+                <LogOut size={16} strokeWidth={1.75} /> Sign out
+              </button>
+            </form>
           </div>
-        </>
+        </AnchoredPopover>
       )}
     </div>
   );

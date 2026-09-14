@@ -17,6 +17,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
+import { externalUrl } from "@/shared/utils/externalUrl";
 import type { TablesUpdate } from "@/types/database.types";
 import { isAllowedVideoUrl } from "./mediaLinks";
 import { DOMINANCE_CODES, IRRADIATION_CODES, BADGE_CODES } from "./template";
@@ -46,15 +47,18 @@ const orNull = (fd: FormData, k: string) => str(fd, k) || null;
 const LINK_PLATFORMS = new Set(["linkedin", "instagram", "x", "custom"]);
 
 /** Reduce instagram/x input to a bare handle no matter what the seller typed —
- *  an @prefix, or a full profile URL pasted in. linkedin/custom keep their URL. */
+ *  an @prefix, or a full profile URL pasted in. linkedin/custom keep their URL,
+ *  with https:// added when it was typed as a bare domain (see externalUrl). */
 function normalizeLinkValue(platform: string, raw: string): string {
-  let v = raw.trim();
+  const v = raw.trim();
   if (platform === "instagram" || platform === "x") {
-    v = v.replace(/^@+/, "");
-    v = v.replace(/^https?:\/\/(www\.)?(instagram\.com|x\.com|twitter\.com)\//i, "");
-    v = v.replace(/[/?#].*$/, ""); // drop any trailing path/query/fragment
+    return v
+      .replace(/^@+/, "")
+      .replace(/^https?:\/\/(www\.)?(instagram\.com|x\.com|twitter\.com)\//i, "")
+      .replace(/[/?#].*$/, "") // drop any trailing path/query/fragment
+      .trim();
   }
-  return v.trim();
+  return externalUrl(v) ?? v;
 }
 
 /** Validate the client-supplied links JSON into a clean array before it lands in
@@ -107,7 +111,8 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
     description: orNull(formData, "description"),
     warehouse_location: orNull(formData, "warehouse_location"),
     address: orNull(formData, "address"),
-    website: orNull(formData, "website"),
+    // A web address is stored with its https://; anything else is kept as typed.
+    website: externalUrl(str(formData, "website")) ?? orNull(formData, "website"),
   };
 
   // Links (and now the warehouse/location list, F-07) live in metadata — one
