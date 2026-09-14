@@ -2687,3 +2687,17 @@ companies an admin acts on later. No RPC moves a company out of `verified`: `app
 `reject_company` guard on `pending`, `resubmit_company_verification` on `rejected`. The security review caught
 it before the PR. Before writing what a state change leaves possible, list the transition functions and their
 FROM-state guards.
+
+## L-081 — a long-running `next dev` can wedge on one image-optimizer request, and e2e `goto` times out
+
+Six Discover/landing tests failed on `page.goto` timeouts while every `/discover` response in the server log took
+under a second. The Playwright trace had exactly one unfinished request — the banner at `w=1200` as WebP; `curl`
+hung on that one width, other widths and bare `sharp` were fast, and a fresh dev server served it in 0.2s. The
+trigger was not reproduced. When `goto` times out but the log is fast, read the trace's pending requests before
+touching code, and restart the dev server before a full e2e gate.
+
+## L-082 — the rtk hook buffers a long-running command's output, so a log-based readiness check never fires
+
+`npm run dev > log` runs as `rtk npm run dev`, which holds output until exit: the log stayed empty while
+`next-server` was already listening on :3000, and a "wait for Ready in the log" check skipped its test. Check
+readiness by the port (`lsof -iTCP:3000 -sTCP:LISTEN`) or start the server through `rtk proxy`.

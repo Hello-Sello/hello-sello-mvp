@@ -2585,6 +2585,20 @@ not belong under one heading. Do not restate them here — one owner per fact.
 
 ## APPLIED TO CLOUD
 
+### 2026-09-13 (Muskan) — `20260913120000_new_companies_start_verified.sql` — ✅ APPLIED 2026-09-13
+One DDL line: `company.verification_status` default `pending` → `verified` (MVP pharmacy push; see
+DECISIONS.md 2026-09-13). Applied with `supabase db push --linked` against `byipusuthdlskdxoexkt` —
+cloud history records it under its local filename timestamp.
+
+**Order:** pushed right BEFORE merging PR #195 (dev → main). Old code + new default is harmless (signups are
+verified, licence field still shown); new code + old default would lock new signups out.
+
+**Pre-flight:** `supabase migration list --linked` — remote tip `20260908120000`; `db push --dry-run` listed
+exactly this one file. **Post-check:** `select column_default from information_schema.columns where
+table_name='company' and column_name='verification_status'` → `'verified'::character varying`.
+
+**Not covered by the default:** companies already `pending` stay pending (4 at push time).
+
 ### 2026-07-22 — Lane A (deal creation & delivery) + group-thread gate drop (6 migrations)
 Applied via `mcp__supabase__apply_migration` against `byipusuthdlskdxoexkt` (not a CLI `db push`) —
 **cloud history now records these under fresh timestamps** (`20260722120421`…`20260722120711`), not

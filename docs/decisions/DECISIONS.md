@@ -751,3 +751,15 @@ from the card removes the guess at any window size or column count.
 ## 2026-09-13 — New companies start verified: no licence upload, no review (MVP pharmacy push)
 
 - `company.verification_status` defaults to `verified` and onboarding no longer asks for a licence — a deliberate deviation from the DEV-38 manual-KYC lock so pharmacies can sign up and use Discover at once. **Accepted risk:** unlicensed signups see Rx-cannabis catalogues, prices and the sponsored banner (§ 10(1) HWG) and can send orders (MedCanG § 4). **Undo:** set the default back to `pending` and restore the licence field. Also accepted: company names are not unique (a signup can copy an existing seller's name) and there is no in-app revoke — a bad signup is removed by direct SQL.
+
+## 2026-09-13 — Items 1–5 shipped as a full dev → main release, not a narrow cherry-pick
+
+- The 2026-09-07 rule keeps full branch merges for work that has been through `/ship`; Muskan chose `claude/muskan/work` → `dev` (#194) → `main` (#195) anyway, because the 35 commits already waiting on `dev` were meant to go live too. The gate ran on the combined branch (tsc, vitest, SQL suites, full e2e, security review).
+
+## 2026-09-13 — Fake seed companies on production are revoked, not deleted
+
+- 13 `.test`/junk companies set to `revoked`, one `audit_log` row each (`company.verify_reverted`, old status in `before_diff`): hidden from every discovery door and reversible. Kept: Aurora (Alice), Canadian Craft, team test companies, West-Berlin Apotheke (possibly a real pharmacy). Bob/StonePharm is locked out as a result.
+
+## 2026-09-13 — Signed-in users land on Discover; Home is greyed out but kept as the blocked-user page
+
+- `APP_LANDING = "/discover"` owns where login, onboarding, invites and Back land. `/home` stays routable because the Discover/Connect gates send pending/revoked users there; it shows the placeholder Sella dashboard with no status message — left as is. Discover puts the Companies directory right under the sponsored banner, ahead of Requests | My network.
