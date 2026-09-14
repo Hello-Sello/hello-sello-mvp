@@ -1,4 +1,5 @@
 import { createClient } from '@/shared/db/server'
+import { externalUrl } from '@/shared/utils/externalUrl'
 
 // The person-identity module. The ONE place that reads/writes a person's profile
 // columns, so onboarding, the account page, the bottom-left card, and the public
@@ -135,7 +136,7 @@ export async function updateMyProfile(fields: ProfileFields): Promise<{ error?: 
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in.' }
 
-  const linkedin = fields.linkedin.trim()
+  const linkedin = externalUrl(fields.linkedin) ?? fields.linkedin.trim()
   const { error } = await supabase
     .from('person')
     .update({

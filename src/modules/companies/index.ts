@@ -1,6 +1,7 @@
 import { createClient } from '@/shared/db/server'
 import { getCurrentCompanyId } from '@/shared/auth'
 import type { Database } from '@/shared/db'
+import { externalUrl } from '@/shared/utils/externalUrl'
 
 type CompanyUpdate = Database['public']['Tables']['company']['Update']
 
@@ -83,7 +84,9 @@ export async function updateCompanyProfile(fields: Partial<CompanyFields>): Prom
   const view = patch as Record<string, string | null>
   for (const key of Object.keys(cols) as (keyof CompanyFields)[]) {
     const v = fields[key]
-    if (v !== undefined) view[cols[key]] = v.trim() || null
+    if (v === undefined) continue
+    // A web address is stored with its https://; anything else is kept as typed.
+    view[cols[key]] = (key === 'website' ? externalUrl(v) : null) ?? (v.trim() || null)
   }
   if (Object.keys(patch).length === 0) return {}
 

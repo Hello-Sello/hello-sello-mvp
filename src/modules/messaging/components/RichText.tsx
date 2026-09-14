@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { externalUrl } from "@/shared/utils/externalUrl";
 
 /**
  * Renders a plain-text message body with lightweight, SAFE inline formatting -
@@ -15,14 +16,6 @@ import { Fragment, type ReactNode } from "react";
 const TOKEN =
   /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|~~([^~]+)~~|\+\+([^+]+)\+\+|_([^_]+)_/g;
 
-/** Allow only http(s) links, or a bare domain we upgrade to https. Else null. */
-function safeUrl(raw: string): string | null {
-  const url = raw.trim();
-  if (/^https?:\/\//i.test(url)) return url;
-  if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(url)) return `https://${url}`;
-  return null;
-}
-
 export function RichText({ body }: { body: string }) {
   const nodes: ReactNode[] = [];
   let last = 0;
@@ -36,7 +29,7 @@ export function RichText({ body }: { body: string }) {
     if (index > last) nodes.push(body.slice(last, index));
 
     if (m[1] !== undefined) {
-      const href = safeUrl(m[2]);
+      const href = externalUrl(m[2]);
       nodes.push(
         href ? (
           <a

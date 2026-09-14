@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Search, ShoppingBag } from "lucide-react";
 import { getCompanyChrome } from "@/app/account/actions";
 import { useBasket, BasketDrawer } from "@/modules/basket";
+import { AnchoredPopover } from "./AnchoredPopover";
 
 /**
  * Top chrome over the content area (F2). A full-width glass bar so the top of the
@@ -32,6 +33,7 @@ function initials(name: string): string {
 export function TopBar() {
   const [chrome, setChrome] = useState<Chrome>(null);
   const { view, open, setOpen } = useBasket();
+  const basketAnchor = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getCompanyChrome().then(setChrome);
@@ -56,10 +58,10 @@ export function TopBar() {
           <Bell size={18} strokeWidth={1.75} />
         </button>
 
-        {/* `relative` anchor for the popover below - it positions off THIS box
-            (top: 100% + gap, right: 0), not a fixed page offset (locked design,
-            prototypes/basket-popover-prototype). */}
-        <div className="relative">
+        {/* The anchor the basket popover is placed against: below it, right
+            edges aligned (locked design, prototypes/basket-popover-prototype).
+            The popover itself renders at body level - see AnchoredPopover. */}
+        <div ref={basketAnchor} className="relative">
           <button
             type="button"
             aria-label="Basket"
@@ -76,11 +78,11 @@ export function TopBar() {
             )}
           </button>
 
-          {/* click-catcher to close on outside click - same convention as
-              ConversationList's NewMenu (z-40 backdrop under a z-50 panel). */}
-          {open && <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />}
-
-          <BasketDrawer />
+          {open && (
+            <AnchoredPopover anchorRef={basketAnchor} placement="bottom-end" offset={10} onClose={() => setOpen(false)}>
+              <BasketDrawer />
+            </AnchoredPopover>
+          )}
         </div>
 
         <div className="flex items-center gap-2.5 rounded-xl bg-white/55 py-1 pl-1 pr-3.5 ring-1 ring-black/5">
