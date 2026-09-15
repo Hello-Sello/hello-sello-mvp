@@ -27,6 +27,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnchoredPopover } from "@/shared/ui/AnchoredPopover";
 import Link from "next/link";
 import {
   Check,
@@ -174,6 +175,8 @@ export function DealPin({
   const [open, setOpen] = useState(false); // the card overlay
   const [picking, setPicking] = useState(false); // the deal dropdown
   const [menuOpen, setMenuOpen] = useState(false); // the top-tier three-dot menu
+  const pickerAnchorRef = useRef<HTMLDivElement>(null);
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
 
   // 04C - the conversation-rail slot the card portals into (chat variant only). The
   // card now opens as a LEAFLET over the conversation rail (same place/shape as the
@@ -190,6 +193,7 @@ export function DealPin({
   // 4.5.2 - the pending proposal (State B) + its popover + its accept/decline
   const [proposal, setProposal] = useState<PendingProposalView | null>(null);
   const [asksOpen, setAsksOpen] = useState(false); // the loud pill's popover
+  const asksAnchorRef = useRef<HTMLDivElement>(null);
   const [acting, setActing] = useState(false); // accept/decline in flight
 
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
@@ -534,7 +538,7 @@ export function DealPin({
           {/* deal-number dropdown - the PICKER (choose among the relationship's
               deals). Its popover now drops from the LEFT since it moved left. */}
           {hasDeal && (
-            <div className="relative shrink-0">
+            <div ref={pickerAnchorRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setPicking((p) => !p)}
@@ -547,42 +551,45 @@ export function DealPin({
                 <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
               </button>
               {picking && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
-                  <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
-                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-                      Deals with {counterpartyName ?? "this company"}
-                    </p>
-                    {deals.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => pickDeal(d.id)}
-                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
-                      >
-                        <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-xs font-semibold text-ink">
-                            {d.hsNumber ?? "Draft deal"}
-                          </span>
-                          <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
-                        </span>
-                        <StatusBadge status={d.status} />
-                        {d.id === selectedId && (
-                          <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
-                        )}
-                      </button>
-                    ))}
-                    {/* D-03 - "See all N deals" → the relationship page */}
-                    <Link
-                      href={`/connect/relationship/${relationshipId}`}
-                      onClick={() => setPicking(false)}
-                      className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
+                <AnchoredPopover
+                  anchorRef={pickerAnchorRef}
+                  placement="bottom-start"
+                  offset={6}
+                  onClose={() => setPicking(false)}
+                  className="glass-strong w-72 rounded-2xl p-1.5"
+                >
+                  <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                    Deals with {counterpartyName ?? "this company"}
+                  </p>
+                  {deals.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => pickDeal(d.id)}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
                     >
-                      See all {deals.length} deals
-                    </Link>
-                  </div>
-                </>
+                      <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-xs font-semibold text-ink">
+                          {d.hsNumber ?? "Draft deal"}
+                        </span>
+                        <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
+                      </span>
+                      <StatusBadge status={d.status} />
+                      {d.id === selectedId && (
+                        <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
+                      )}
+                    </button>
+                  ))}
+                  {/* D-03 - "See all N deals" → the relationship page */}
+                  <Link
+                    href={`/connect/relationship/${relationshipId}`}
+                    onClick={() => setPicking(false)}
+                    className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
+                  >
+                    See all {deals.length} deals
+                  </Link>
+                </AnchoredPopover>
               )}
             </div>
           )}
@@ -618,7 +625,7 @@ export function DealPin({
 
           {/* ⋮ menu - secondary actions, pushed right; vertical dots to spare
               horizontal room now that the chat can be 50% wide */}
-          <div className="relative ml-auto shrink-0">
+          <div ref={menuAnchorRef} className="relative ml-auto shrink-0">
             <button
               type="button"
               onClick={() => setMenuOpen((o) => !o)}
@@ -631,18 +638,21 @@ export function DealPin({
               <MoreVertical size={17} strokeWidth={1.75} />
             </button>
             {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
-                  <Link
-                    href={`/connect/relationship/${relationshipId}`}
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
-                  >
-                    <Users size={15} strokeWidth={1.75} /> View relationship
-                  </Link>
-                </div>
-              </>
+              <AnchoredPopover
+                anchorRef={menuAnchorRef}
+                placement="bottom-end"
+                offset={6}
+                onClose={() => setMenuOpen(false)}
+                className="glass-strong w-56 rounded-2xl p-1.5"
+              >
+                <Link
+                  href={`/connect/relationship/${relationshipId}`}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                >
+                  <Users size={15} strokeWidth={1.75} /> View relationship
+                </Link>
+              </AnchoredPopover>
             )}
           </div>
         </div>
@@ -660,7 +670,7 @@ export function DealPin({
           {/* the action lives on the right: a LOUD pill when it is my turn, a
               quiet "waiting" chip when I have accepted and the other side has not */}
           {mustAct && (
-            <div className="relative shrink-0">
+            <div ref={asksAnchorRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setAsksOpen((o) => !o)}
@@ -678,77 +688,80 @@ export function DealPin({
               </button>
 
               {asksOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setAsksOpen(false)} />
-                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
-                    <div className="flex items-stretch">
-                      <span className="w-1 shrink-0 bg-brand" aria-hidden />
-                      <div className="min-w-0 flex-1 p-3">
-                        <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
-                          <Sparkles size={12} strokeWidth={2} />
-                          Sella spotted a deal
-                        </div>
-                        <p className="mb-2 text-[11px] text-ink/50">
-                          From {counterpartyName ?? "your contact"}
-                        </p>
+                <AnchoredPopover
+                  anchorRef={asksAnchorRef}
+                  placement="bottom-end"
+                  offset={6}
+                  onClose={() => setAsksOpen(false)}
+                  className="glass-strong w-80 overflow-hidden rounded-2xl"
+                >
+                  <div className="flex items-stretch">
+                    <span className="w-1 shrink-0 bg-brand" aria-hidden />
+                    <div className="min-w-0 flex-1 p-3">
+                      <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
+                        <Sparkles size={12} strokeWidth={2} />
+                        Sella spotted a deal
+                      </div>
+                      <p className="mb-2 text-[11px] text-ink/50">
+                        From {counterpartyName ?? "your contact"}
+                      </p>
 
-                        <ul className="space-y-1.5">
-                          {proposal!.lines.map((l, i) => (
-                            <li
-                              key={i}
-                              className="flex items-baseline justify-between gap-3 text-xs"
-                            >
-                              <span className="min-w-0 flex-1 truncate text-ink/80">{l.name}</span>
-                              <span className="shrink-0 font-mono text-[11px] text-ink/60">
-                                {l.quantity}
-                                {l.unit}
-                                {l.unitPrice != null
-                                  ? ` · ${formatMoney(l.unitPrice, l.currency)}`
-                                  : ""}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-
-                        {(() => {
-                          const priced = proposal!.lines.filter((l) => l.unitPrice != null);
-                          if (priced.length === 0) return null;
-                          const total = priced.reduce(
-                            (s, l) => s + l.quantity * (l.unitPrice as number),
-                            0,
-                          );
-                          return (
-                            <div className="mt-2 flex items-baseline justify-between border-t border-black/5 pt-2 text-xs">
-                              <span className="text-ink/50">Total</span>
-                              <span className="font-mono font-semibold text-ink">
-                                {formatMoney(total, proposal!.currency)}
-                              </span>
-                            </div>
-                          );
-                        })()}
-
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void runProposal("accept")}
-                            disabled={acting}
-                            className="flex-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
+                      <ul className="space-y-1.5">
+                        {proposal!.lines.map((l, i) => (
+                          <li
+                            key={i}
+                            className="flex items-baseline justify-between gap-3 text-xs"
                           >
-                            {acting ? "Working…" : "Accept"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void runProposal("reject")}
-                            disabled={acting}
-                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-black/[0.04] disabled:opacity-50"
-                          >
-                            Decline
-                          </button>
-                        </div>
+                            <span className="min-w-0 flex-1 truncate text-ink/80">{l.name}</span>
+                            <span className="shrink-0 font-mono text-[11px] text-ink/60">
+                              {l.quantity}
+                              {l.unit}
+                              {l.unitPrice != null
+                                ? ` · ${formatMoney(l.unitPrice, l.currency)}`
+                                : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {(() => {
+                        const priced = proposal!.lines.filter((l) => l.unitPrice != null);
+                        if (priced.length === 0) return null;
+                        const total = priced.reduce(
+                          (s, l) => s + l.quantity * (l.unitPrice as number),
+                          0,
+                        );
+                        return (
+                          <div className="mt-2 flex items-baseline justify-between border-t border-black/5 pt-2 text-xs">
+                            <span className="text-ink/50">Total</span>
+                            <span className="font-mono font-semibold text-ink">
+                              {formatMoney(total, proposal!.currency)}
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void runProposal("accept")}
+                          disabled={acting}
+                          className="flex-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
+                        >
+                          {acting ? "Working…" : "Accept"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void runProposal("reject")}
+                          disabled={acting}
+                          className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-black/[0.04] disabled:opacity-50"
+                        >
+                          Decline
+                        </button>
                       </div>
                     </div>
                   </div>
-                </>
+                </AnchoredPopover>
               )}
             </div>
           )}

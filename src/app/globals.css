@@ -112,7 +112,10 @@ html { scroll-behavior: smooth; }
    app's existing glass tokens + brand family. VISUAL only - no behavior
    lives here.
    ===================================================================== */
-.dealcard {
+/* The tokens also ride on `.dealcard-tokens`, for the panels the card opens at
+   document.body (its menus), which sit outside `.dealcard`. */
+.dealcard,
+.dealcard-tokens {
   /* pink family reuses the app brand so the card stays in the app palette */
   --dc-pink: var(--color-brand);
   --dc-pink-deep: var(--color-brand-deep);
@@ -136,7 +139,9 @@ html { scroll-behavior: smooth; }
   --dc-tint-hi: rgba(255, 250, 253, 0.82);
   --dc-tint-lo: rgba(252, 239, 246, 0.62);
   --dc-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
 
+.dealcard {
   position: relative;
   color: var(--dc-ink);
   background: linear-gradient(180deg, var(--dc-tint-hi), var(--dc-tint-lo));

@@ -6,6 +6,7 @@ import type { ChatMessageView, ConversationListItem } from "../types";
 import { renameGroupThread } from "../supabase/store";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
+import { AnchoredPopover } from "@/shared/ui/AnchoredPopover";
 
 /**
  * The thread (panel 4): header + ordered message stream + composer. Both thread
@@ -28,6 +29,7 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // header overflow menu (⋯) - the home for secondary actions (some still stubs)
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
 
   // at-bottom detection: a reader scrolled up is NOT yanked down by a new
   // message, and the jump-to-bottom arrow shows only when scrolled up. The ref
@@ -156,7 +158,7 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
             >
               <Users size={17} strokeWidth={1.75} />
             </Link>
-            <div className="relative">
+            <div ref={menuAnchorRef} className="relative">
               <button
                 type="button"
                 onClick={() => setMenuOpen((o) => !o)}
@@ -169,20 +171,23 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
                 <MoreHorizontal size={17} strokeWidth={1.75} />
               </button>
               {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
-                    <Link
-                      href={`/connect/relationship/${relationshipId}`}
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
-                    >
-                      <Users size={15} strokeWidth={1.75} /> View relationship
-                    </Link>
-                    <MenuStub icon={BellOff} label="Mute notifications" />
-                    <MenuStub icon={Search} label="Search in conversation" />
-                  </div>
-                </>
+                <AnchoredPopover
+                  anchorRef={menuAnchorRef}
+                  placement="bottom-end"
+                  offset={6}
+                  onClose={() => setMenuOpen(false)}
+                  className="glass-strong w-56 rounded-2xl p-1.5"
+                >
+                  <Link
+                    href={`/connect/relationship/${relationshipId}`}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                  >
+                    <Users size={15} strokeWidth={1.75} /> View relationship
+                  </Link>
+                  <MenuStub icon={BellOff} label="Mute notifications" />
+                  <MenuStub icon={Search} label="Search in conversation" />
+                </AnchoredPopover>
               )}
             </div>
           </div>
