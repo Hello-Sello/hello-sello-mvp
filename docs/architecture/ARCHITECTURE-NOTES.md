@@ -191,3 +191,11 @@ established this first (`docs/muskan-build/deal-calendar.md`); `OrdersTable`/`Or
 (`src/modules/allocate`) is the second instance, generalized from a seller-only original when Buy
 adopted it. The next buyer/seller-mirrored surface should reach for this shape by default rather
 than re-deriving it.
+
+## 2026-09-15 — Floating panels and modals render at document.body
+
+- Menus use `AnchoredPopover` (placement, flip when there is no room, click-outside + Escape); full-screen overlays use `BodyPortal` (both in `src/shared/ui`). A `.glass` element (Safari applies its backdrop-filter) or a flipping card (transform/perspective) is the containing block for `position: fixed`, so an overlay rendered inside one shrinks to it and cannot rise above the page. Deal-card menus opened at body carry the card's colours via `.dealcard-tokens`.
+
+## 2026-09-15 — Typed web addresses become hrefs through `externalUrl`
+
+- `src/shared/utils/externalUrl.ts` is the one owner: a bare domain gets `https://`, anything that isn't http(s) is refused. Company website, shop links, LinkedIn and chat links use it on display and on save, so a scheme-less value can't resolve relative to our own site.

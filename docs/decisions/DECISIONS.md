@@ -763,3 +763,7 @@ from the card removes the guess at any window size or column count.
 ## 2026-09-13 — Signed-in users land on Discover; Home is greyed out but kept as the blocked-user page
 
 - `APP_LANDING = "/discover"` owns where login, onboarding, invites and Back land. `/home` stays routable because the Discover/Connect gates send pending/revoked users there; it shows the placeholder Sella dashboard with no status message — left as is. Discover puts the Companies directory right under the sponsored banner, ahead of Requests | My network.
+
+## 2026-09-15 — The glass blur stays Safari-only until the remaining in-glass menus are re-audited
+
+- The CSS build keeps only `-webkit-backdrop-filter` for `.glass`/`.glass-strong` (lightningcss #1327), so Chrome and Firefox render no blur. Restoring it would make overlays inside glass trap in Chromium the way they did on iPad; session 107 moved the known ones to body level, and restoring waits for a re-audit of the rest (Allocation/Orders table menus, Discover dropdowns).
