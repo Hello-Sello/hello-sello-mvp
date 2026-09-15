@@ -1,38 +1,59 @@
 "use client";
 
 /**
- * A panel placed against a trigger but rendered at document.body.
+ * A panel placed against a trigger but rendered at document.body — see BodyPortal
+ * for why floating panels must live there.
  *
- * The app chrome (IconRail, TopBar) is `.glass`. Wherever the browser applies its
- * backdrop-filter (Safari/iPad), each glass element is its own stacking context
- * AND the containing block for `position: fixed` descendants. A popover rendered
- * inside one cannot rise above page content whatever its z-index, and a
- * `fixed inset-0` click-catcher shrinks to the bar. At body level neither applies.
- *
- * Placement names the side of the anchor, then the shared edge: `right-start`
- * (beside, tops aligned), `right-end` (beside, bottoms aligned), `bottom-end`
- * (below, right edges aligned). `offset` is the gap in px. The position is
- * re-measured on resize and scroll.
+ * Placement names the side of the anchor, then the shared edge: `bottom-start`
+ * (below, left edges aligned), `bottom-end`, `bottom-stretch` (below, as wide as
+ * the anchor), `top-start`, `top-end`, `right-start` (beside, tops aligned) and
+ * `right-end` (beside, bottoms aligned). `offset` is the gap in px. A top/bottom
+ * panel opens on the other side when its own side has no room, and every panel is
+ * kept inside the viewport. The position follows resize, scroll and the panel's
+ * own size changes.
  *
  * Pass `onClose` for a full-screen click-catcher plus Escape; leave it out when
  * the caller dismisses the panel itself (the hover flyout).
  */
-import { useEffect, useLayoutEffect, useState, type HTMLAttributes, type RefObject } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes, type RefObject } from "react";
+import { BodyPortal } from "./BodyPortal";
 
-export type PopoverPlacement = "right-start" | "right-end" | "bottom-end";
+export type PopoverPlacement =
+  | "bottom-start"
+  | "bottom-end"
+  | "bottom-stretch"
+  | "top-start"
+  | "top-end"
+  | "right-start"
+  | "right-end";
 
 type Position = { top?: number; bottom?: number; left?: number; right?: number };
 
-function positionFor(anchor: DOMRect, placement: PopoverPlacement, offset: number): Position {
-  switch (placement) {
-    case "right-start":
-      return { left: anchor.right + offset, top: anchor.top };
-    case "right-end":
-      return { left: anchor.right + offset, bottom: window.innerHeight - anchor.bottom };
-    case "bottom-end":
-      return { top: anchor.bottom + offset, right: window.innerWidth - anchor.right };
+/** The smallest gap kept between a panel and the viewport edge. */
+const EDGE = 8;
+
+const clamp = (value: number, max: number) => Math.max(EDGE, Math.min(value, max));
+
+function positionFor(anchor: DOMRect, panel: DOMRect, placement: PopoverPlacement, offset: number): Position {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const [side, align] = placement.split("-");
+
+  if (side === "right") {
+    const left = anchor.right + offset;
+    return align === "start"
+      ? { left, top: clamp(anchor.top, vh - panel.height - EDGE) }
+      : { left, bottom: clamp(vh - anchor.bottom, vh - panel.height - EDGE) };
   }
+
+  const fitsBelow = anchor.bottom + offset + panel.height <= vh;
+  const fitsAbove = anchor.top - offset - panel.height >= 0;
+  const below = side === "bottom" ? fitsBelow || !fitsAbove : fitsBelow && !fitsAbove;
+  const vertical = below ? { top: anchor.bottom + offset } : { bottom: vh - anchor.top + offset };
+
+  if (align === "stretch") return { ...vertical, left: anchor.left, right: vw - anchor.right };
+  if (align === "start") return { ...vertical, left: clamp(anchor.left, vw - panel.width - EDGE) };
+  return { ...vertical, right: clamp(vw - anchor.right, vw - panel.width - EDGE) };
 }
 
 export function AnchoredPopover({
@@ -49,17 +70,26 @@ export function AnchoredPopover({
   offset?: number;
   onClose?: () => void;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  // null until measured: the panel first renders invisibly so its size is known
+  // before it is placed, then appears in place without a jump.
   const [position, setPosition] = useState<Position | null>(null);
 
   useLayoutEffect(() => {
+    const panel = panelRef.current;
     function measure() {
       const anchor = anchorRef.current;
-      if (anchor) setPosition(positionFor(anchor.getBoundingClientRect(), placement, offset));
+      if (anchor && panel) {
+        setPosition(positionFor(anchor.getBoundingClientRect(), panel.getBoundingClientRect(), placement, offset));
+      }
     }
     measure();
+    const resize = new ResizeObserver(measure);
+    if (panel) resize.observe(panel);
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
     return () => {
+      resize.disconnect();
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
@@ -74,16 +104,21 @@ export function AnchoredPopover({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Nothing renders until the anchor is measured, so the panel never flashes at 0,0.
-  if (!position) return null;
-
-  return createPortal(
-    <>
+  return (
+    <BodyPortal>
       {onClose && <div className="fixed inset-0 z-40" onClick={onClose} />}
-      <div {...panelProps} style={{ position: "fixed", ...position }} className={`z-50 ${className}`}>
+      <div
+        {...panelProps}
+        ref={panelRef}
+        style={
+          position
+            ? { position: "fixed", ...position }
+            : { position: "fixed", top: 0, left: 0, visibility: "hidden" }
+        }
+        className={`z-50 ${className}`}
+      >
         {children}
       </div>
-    </>,
-    document.body,
+    </BodyPortal>
   );
 }
