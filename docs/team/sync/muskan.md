@@ -8,6 +8,6 @@
 
 ---
 
-**Last updated:** 2026-09-13 — session 106 closed (pharmacy onboarding push shipped).
+**Last updated:** 2026-09-15 — session 107 closed (Marcel's iPad fixes shipped via #199–#205).
 **Status:** idle
 **Shared files locked:** none
