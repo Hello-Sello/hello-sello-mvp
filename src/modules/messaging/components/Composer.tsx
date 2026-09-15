@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { AnchoredPopover } from "@/shared/ui/AnchoredPopover";
 import {
   Plus,
   Type,
@@ -218,8 +219,9 @@ function EmojiButton({
   setOpen: (v: boolean) => void;
   onPick: (emoji: string) => void;
 }) {
+  const anchorRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -234,24 +236,27 @@ function EmojiButton({
         <Smile size={15} strokeWidth={1.75} />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="glass-strong absolute bottom-full left-0 z-20 mb-2 grid w-56 grid-cols-8 gap-0.5 rounded-2xl p-2">
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => {
-                  onPick(e);
-                  setOpen(false);
-                }}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-base transition-colors hover:bg-brand-soft/50"
-              >
-                {e}
-              </button>
-            ))}
-          </div>
-        </>
+        <AnchoredPopover
+          anchorRef={anchorRef}
+          placement="top-start"
+          offset={8}
+          onClose={() => setOpen(false)}
+          className="glass-strong grid w-56 grid-cols-8 gap-0.5 rounded-2xl p-2"
+        >
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => {
+                onPick(e);
+                setOpen(false);
+              }}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-base transition-colors hover:bg-brand-soft/50"
+            >
+              {e}
+            </button>
+          ))}
+        </AnchoredPopover>
       )}
     </div>
   );
@@ -267,13 +272,14 @@ function EmojiButton({
  * until a storage slice (bucket + RLS) lands.
  */
 function PlusMenu({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+  const anchorRef = useRef<HTMLDivElement>(null);
   function createDeal() {
     window.dispatchEvent(new CustomEvent("hs:create-deal"));
     setOpen(false);
   }
 
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -289,22 +295,25 @@ function PlusMenu({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => v
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="glass-strong absolute bottom-full left-0 z-20 mb-2 w-56 rounded-2xl p-1.5">
-            <button
-              type="button"
-              onClick={createDeal}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-brand transition-colors hover:bg-brand-soft/45"
-            >
-              <Handshake size={16} strokeWidth={2} /> Create a deal
-            </button>
-            <div className="my-1 h-px bg-black/5" />
-            <PlusStub icon={Upload} label="Upload a file" />
-            <PlusStub icon={ImageIcon} label="Photo" />
-            <PlusStub icon={Video} label="Video" />
-          </div>
-        </>
+        <AnchoredPopover
+          anchorRef={anchorRef}
+          placement="top-start"
+          offset={8}
+          onClose={() => setOpen(false)}
+          className="glass-strong w-56 rounded-2xl p-1.5"
+        >
+          <button
+            type="button"
+            onClick={createDeal}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-brand transition-colors hover:bg-brand-soft/45"
+          >
+            <Handshake size={16} strokeWidth={2} /> Create a deal
+          </button>
+          <div className="my-1 h-px bg-black/5" />
+          <PlusStub icon={Upload} label="Upload a file" />
+          <PlusStub icon={ImageIcon} label="Photo" />
+          <PlusStub icon={Video} label="Video" />
+        </AnchoredPopover>
       )}
     </div>
   );

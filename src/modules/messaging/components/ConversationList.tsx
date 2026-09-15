@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Search,
   Plus,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ConversationListItem } from "@/modules/messaging";
 import { ConversationRow } from "./ConversationRow";
+import { AnchoredPopover } from "@/shared/ui/AnchoredPopover";
 
 /**
  * The panel-3 filters (D-01). Exactly THREE chips stay always-visible -
@@ -246,6 +247,7 @@ function NewMenu({
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   function choose(mode: "newchat" | "group") {
     setOpen(false);
@@ -253,7 +255,7 @@ function NewMenu({
   }
 
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -267,25 +269,28 @@ function NewMenu({
         <ChevronDown size={13} strokeWidth={2.25} />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="glass-strong absolute inset-x-0 top-full z-50 mt-1.5 rounded-2xl p-1.5">
-            <button
-              type="button"
-              onClick={() => choose("newchat")}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink transition hover:bg-black/[0.04]"
-            >
-              <MessageSquarePlus size={15} strokeWidth={1.9} /> New chat
-            </button>
-            <button
-              type="button"
-              onClick={() => choose("group")}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink transition hover:bg-black/[0.04]"
-            >
-              <Users size={15} strokeWidth={1.9} /> New group
-            </button>
-          </div>
-        </>
+        <AnchoredPopover
+          anchorRef={anchorRef}
+          placement="bottom-stretch"
+          offset={6}
+          onClose={() => setOpen(false)}
+          className="glass-strong rounded-2xl p-1.5"
+        >
+          <button
+            type="button"
+            onClick={() => choose("newchat")}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+          >
+            <MessageSquarePlus size={15} strokeWidth={1.9} /> New chat
+          </button>
+          <button
+            type="button"
+            onClick={() => choose("group")}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+          >
+            <Users size={15} strokeWidth={1.9} /> New group
+          </button>
+        </AnchoredPopover>
       )}
     </div>
   );
@@ -306,9 +311,10 @@ function GroupFilterDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const active = DROPDOWN_FILTERS.find((f) => f.key === filter);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -325,29 +331,32 @@ function GroupFilterDropdown({
         <ChevronDown size={12} strokeWidth={2.25} />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="glass-strong absolute right-0 top-full z-40 mt-1.5 w-40 rounded-2xl p-1.5">
-            {DROPDOWN_FILTERS.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => {
-                  onFilterChange(f.key);
-                  setOpen(false);
-                }}
-                aria-current={f.key === filter ? "true" : undefined}
-                className={`flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm transition ${
-                  f.key === filter
-                    ? "bg-brand-soft/40 font-medium text-brand-deep"
-                    : "text-ink hover:bg-black/[0.04]"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </>
+        <AnchoredPopover
+          anchorRef={anchorRef}
+          placement="bottom-end"
+          offset={6}
+          onClose={() => setOpen(false)}
+          className="glass-strong w-40 rounded-2xl p-1.5"
+        >
+          {DROPDOWN_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => {
+                onFilterChange(f.key);
+                setOpen(false);
+              }}
+              aria-current={f.key === filter ? "true" : undefined}
+              className={`flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm transition ${
+                f.key === filter
+                  ? "bg-brand-soft/40 font-medium text-brand-deep"
+                  : "text-ink hover:bg-black/[0.04]"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </AnchoredPopover>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   unlinkIdentity,
 } from './actions'
 import { changeEmail } from '@/app/account/actions'
+import { BodyPortal } from '@/shared/ui/BodyPortal'
 
 /**
  * The Login & security surface (SET-01 Personal group / SET-02). Client component so
@@ -473,33 +474,35 @@ function DeletionScheduledCard({
 // ---- Modals -----------------------------------------------------------------
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm"
-    >
+    <BodyPortal>
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onClose()
+        }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm"
       >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <h3 className="text-lg font-bold text-ink">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-lg p-1 text-ink-muted transition hover:bg-black/[0.05]"
-          >
-            <X size={18} />
-          </button>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl"
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <h3 className="text-lg font-bold text-ink">{title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-lg p-1 text-ink-muted transition hover:bg-black/[0.05]"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          {children}
         </div>
-        {children}
       </div>
-    </div>
+    </BodyPortal>
   )
 }
 

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Power, Building2, RotateCcw, Info, X } from 'lucide-react'
 import type { ActionResult } from '@/app/settings/security/actions'
+import { BodyPortal } from '@/shared/ui/BodyPortal'
 
 /**
  * The thin Organization → Security tab (D-06 — a small tab, NOT a permissions matrix).
@@ -139,57 +140,59 @@ function ConfirmModal({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm"
-    >
+    <BodyPortal>
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onClose()
+        }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm"
       >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-danger/10 text-danger">
-            <Building2 size={20} />
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-lg p-1 text-ink-muted transition hover:bg-black/[0.05]"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <h3 className="text-lg font-bold text-ink">Deactivate {companyName}?</h3>
-        <p className="mt-2 text-sm leading-relaxed text-ink">
-          The company is hidden from Discover and your whole team is signed out to the no-company
-          state. Members keep their accounts. <b>Nothing is deleted</b> — reactivate any time.
-        </p>
-        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-        <div className="mt-5 flex gap-3">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-            className="flex-1 rounded-xl border border-black/10 bg-white/70 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-white disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={confirm}
-            className="flex-1 rounded-xl bg-danger px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-          >
-            {busy ? 'Deactivating…' : 'Deactivate company'}
-          </button>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl"
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-danger/10 text-danger">
+              <Building2 size={20} />
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-lg p-1 text-ink-muted transition hover:bg-black/[0.05]"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <h3 className="text-lg font-bold text-ink">Deactivate {companyName}?</h3>
+          <p className="mt-2 text-sm leading-relaxed text-ink">
+            The company is hidden from Discover and your whole team is signed out to the no-company
+            state. Members keep their accounts. <b>Nothing is deleted</b> — reactivate any time.
+          </p>
+          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+          <div className="mt-5 flex gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onClose}
+              className="flex-1 rounded-xl border border-black/10 bg-white/70 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-white disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={confirm}
+              className="flex-1 rounded-xl bg-danger px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? 'Deactivating…' : 'Deactivate company'}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </BodyPortal>
   )
 }

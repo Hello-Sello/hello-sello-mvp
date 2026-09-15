@@ -21,7 +21,7 @@
  * Approve. Upload is FRONT-END ONLY for now (the picked file is a local object URL,
  * shown as an icon and downloadable in-session, not yet stored on a server).
  */
-import { useRef, useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   Check,
   Download,
@@ -43,6 +43,7 @@ import {
   toggleThingStatus,
 } from "../supabase/writes";
 import type { MemberView, ThingType, ThingView } from "../types";
+import { AnchoredPopover } from "@/shared/ui/AnchoredPopover";
 
 /** The action word each Thing kind leads with (D-15). */
 const ACTION_WORD: Record<ThingType, string | null> = {
@@ -101,6 +102,9 @@ export function OpenItems({
   const [items, setItems] = useState<ThingView[]>(things);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addAnchorRef = useRef<HTMLDivElement>(null);
+  const assignAnchorRef = useRef<HTMLDivElement>(null);
+  const draftAnchorRef = useRef<HTMLDivElement>(null);
   // D-17: a new thing starts PRIVATE ("only you") - flipping it to shared is the
   // explicit act (T-12-28). On an unsent draft nothing leaks either way: the
   // counterparty cannot reach the draft workspace at all until Send (RLS, D-08).
@@ -377,7 +381,7 @@ export function OpenItems({
                   assign · private-lock · delete */}
               <div className="mt-px flex shrink-0 items-center gap-2.5 text-[color:var(--dc-ink-38)]">
                 {canAssign && (
-                  <div className="relative">
+                  <div ref={assignOpenId === t.id ? assignAnchorRef : undefined} className="relative">
                     <button
                       type="button"
                       onClick={() => setAssignOpenId((id) => (id === t.id ? null : t.id))}
@@ -392,6 +396,7 @@ export function OpenItems({
                     </button>
                     {assignOpenId === t.id && (
                       <PeopleList
+                        anchorRef={assignAnchorRef}
                         people={people}
                         viewerPersonId={viewerPersonId}
                         onPick={(p) => void appendMention(t, p)}
@@ -431,7 +436,7 @@ export function OpenItems({
 
       {/* the draft row (a type was picked) */}
       {draft && (
-        <div className="relative -mx-2 mt-1 flex items-start gap-2.5 rounded-xl bg-brand/[0.04] px-2 py-2">
+        <div ref={draftAnchorRef} className="relative -mx-2 mt-1 flex items-start gap-2.5 rounded-xl bg-brand/[0.04] px-2 py-2">
           <span className="mt-px h-[19px] w-[19px] shrink-0 rounded-md border-[1.5px] border-black/20 bg-white opacity-60" />
           {draft.kind === "upload" &&
             (draft.file ? (
@@ -470,6 +475,7 @@ export function OpenItems({
           </button>
           {draft.atQuery !== null && (
             <PeopleList
+              anchorRef={draftAnchorRef}
               people={filterPeople(people, draft.atQuery)}
               viewerPersonId={viewerPersonId}
               onPick={pickDraftMention}
@@ -482,7 +488,7 @@ export function OpenItems({
 
       {/* the "+ Add something" button + its type menu */}
       {workspaceId && !draft && (
-        <div className="relative mt-2.5 inline-block">
+        <div ref={addAnchorRef} className="relative mt-2.5 inline-block">
           <button
             type="button"
             onClick={() => setAddMenuOpen((o) => !o)}
@@ -493,34 +499,37 @@ export function OpenItems({
             <Plus className="h-3.5 w-3.5" /> Add something
           </button>
           {addMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
-              <div className="glass-strong absolute bottom-full left-0 z-20 mb-1.5 w-56 rounded-2xl p-1.5">
-                <button
-                  type="button"
-                  onClick={() => setAddPrivate((p) => !p)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12.5px] font-semibold transition ${
-                    addPrivate
-                      ? "bg-brand/10 text-[color:var(--dc-pink-deep)]"
-                      : "text-[color:var(--dc-ink)] hover:bg-black/[0.04]"
-                  }`}
-                >
-                  <Lock className="h-3.5 w-3.5 shrink-0" /> Private / secret
-                  <span className="ml-auto text-[10px] font-medium text-[color:var(--dc-ink-38)]">
-                    {addPrivate ? "on · only you" : "choose first"}
-                  </span>
-                </button>
-                <div className="my-1 h-px bg-black/5" />
-                <MenuItem icon={Type} label="Free text" onClick={() => openType("free")} />
-                <MenuItem icon={Upload} label="Upload" onClick={() => openType("upload")} />
-                <MenuItem
-                  icon={UserPlus}
-                  label="Approve"
-                  hint="@ someone"
-                  onClick={() => openType("approve")}
-                />
-              </div>
-            </>
+            <AnchoredPopover
+              anchorRef={addAnchorRef}
+              placement="top-start"
+              offset={6}
+              onClose={() => setAddMenuOpen(false)}
+              className="dealcard-tokens glass-strong w-56 rounded-2xl p-1.5"
+            >
+              <button
+                type="button"
+                onClick={() => setAddPrivate((p) => !p)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12.5px] font-semibold transition ${
+                  addPrivate
+                    ? "bg-brand/10 text-[color:var(--dc-pink-deep)]"
+                    : "text-[color:var(--dc-ink)] hover:bg-black/[0.04]"
+                }`}
+              >
+                <Lock className="h-3.5 w-3.5 shrink-0" /> Private / secret
+                <span className="ml-auto text-[10px] font-medium text-[color:var(--dc-ink-38)]">
+                  {addPrivate ? "on · only you" : "choose first"}
+                </span>
+              </button>
+              <div className="my-1 h-px bg-black/5" />
+              <MenuItem icon={Type} label="Free text" onClick={() => openType("free")} />
+              <MenuItem icon={Upload} label="Upload" onClick={() => openType("upload")} />
+              <MenuItem
+                icon={UserPlus}
+                label="Approve"
+                hint="@ someone"
+                onClick={() => openType("approve")}
+              />
+            </AnchoredPopover>
           )}
         </div>
       )}
@@ -589,6 +598,7 @@ function MenuItem({
  * companies' rosters show, "You" first-name-labelled.
  */
 function PeopleList({
+  anchorRef,
   people,
   viewerPersonId,
   onPick,
@@ -596,6 +606,8 @@ function PeopleList({
   anchor = "right",
   search = false,
 }: {
+  /** The element the list opens against: below it, or above when there is no room. */
+  anchorRef: RefObject<HTMLElement | null>;
   people: MemberView[];
   viewerPersonId?: string | null;
   onPick: (p: MemberView) => void;
@@ -606,48 +618,47 @@ function PeopleList({
   const [q, setQ] = useState("");
   const shown = search ? filterPeople(people, q) : people;
   return (
-    <>
-      <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div
-        className={`glass-strong absolute top-full z-20 mt-1.5 max-h-56 w-60 overflow-y-auto rounded-2xl p-1.5 ${
-          anchor === "right" ? "right-0" : "left-0"
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {search && (
-          <div className="mb-1 flex items-center gap-1.5 rounded-lg bg-black/[0.04] px-2 py-1.5">
-            <Search className="h-3 w-3 text-[color:var(--dc-ink-38)]" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              autoFocus
-              placeholder="Search people…"
-              className="min-w-0 flex-1 bg-transparent text-[12px] text-[color:var(--dc-ink)] outline-none placeholder:text-[color:var(--dc-ink-38)]"
-            />
-          </div>
-        )}
-        {shown.length === 0 ? (
-          <p className="px-2 py-2 text-[11px] text-[color:var(--dc-ink-38)]">No match.</p>
-        ) : (
-          shown.map((p) => (
-            <button
-              key={p.personId}
-              type="button"
-              onClick={() => onPick(p)}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/[0.04]"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12.5px] font-semibold text-[color:var(--dc-ink)]">
-                  {p.personId === viewerPersonId ? "You" : p.name}
-                </span>
-                <span className="block truncate text-[10.5px] text-[color:var(--dc-ink-38)]">
-                  {p.companyName}
-                </span>
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      placement={anchor === "right" ? "bottom-end" : "bottom-start"}
+      offset={6}
+      onClose={onClose}
+      className="dealcard-tokens glass-strong max-h-56 w-60 overflow-y-auto rounded-2xl p-1.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {search && (
+        <div className="mb-1 flex items-center gap-1.5 rounded-lg bg-black/[0.04] px-2 py-1.5">
+          <Search className="h-3 w-3 text-[color:var(--dc-ink-38)]" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            autoFocus
+            placeholder="Search people…"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-[color:var(--dc-ink)] outline-none placeholder:text-[color:var(--dc-ink-38)]"
+          />
+        </div>
+      )}
+      {shown.length === 0 ? (
+        <p className="px-2 py-2 text-[11px] text-[color:var(--dc-ink-38)]">No match.</p>
+      ) : (
+        shown.map((p) => (
+          <button
+            key={p.personId}
+            type="button"
+            onClick={() => onPick(p)}
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/[0.04]"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[12.5px] font-semibold text-[color:var(--dc-ink)]">
+                {p.personId === viewerPersonId ? "You" : p.name}
               </span>
-            </button>
-          ))
-        )}
-      </div>
-    </>
+              <span className="block truncate text-[10.5px] text-[color:var(--dc-ink-38)]">
+                {p.companyName}
+              </span>
+            </span>
+          </button>
+        ))
+      )}
+    </AnchoredPopover>
   );
 }

@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { Wordmark } from '@/shared/ui/Wordmark'
+import { BodyPortal } from '@/shared/ui/BodyPortal'
 import { Avatar } from '@/shared/ui/Avatar'
 import { AvatarUpload } from '@/shared/ui/AvatarUpload'
 import { MultiSelect, type MultiSelectOption } from './MultiSelect'
@@ -897,25 +898,27 @@ function WithdrawDialog({
 // onboarding card self-contained rather than reaching across routes.
 function StepperOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-deep/20 p-6 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      role="presentation"
-    >
-      <div role="dialog" aria-modal="true" className="glass-strong relative w-full max-w-md rounded-3xl p-6 shadow-2xl">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute right-4 top-4 rounded-lg p-1 text-ink-muted transition hover:bg-black/[0.05] hover:text-ink"
-        >
-          <X size={18} />
-        </button>
-        {children}
+    <BodyPortal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-brand-deep/20 p-6 backdrop-blur-sm"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+        role="presentation"
+      >
+        <div role="dialog" aria-modal="true" className="glass-strong relative w-full max-w-md rounded-3xl p-6 shadow-2xl">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute right-4 top-4 rounded-lg p-1 text-ink-muted transition hover:bg-black/[0.05] hover:text-ink"
+          >
+            <X size={18} />
+          </button>
+          {children}
+        </div>
       </div>
-    </div>
+    </BodyPortal>
   )
 }
 
