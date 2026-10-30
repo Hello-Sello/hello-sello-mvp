@@ -13,7 +13,7 @@ function formatGrams(g: number) {
 }
 
 function formatDate(ts: number) {
-  return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(ts).toLocaleDateString("en-GB");
 }
 
 export function totalsFor(poll: DemandPoll) {
@@ -104,7 +104,8 @@ function PollRow({ poll, open, onToggle }: { poll: DemandPoll; open: boolean; on
           <span className="block truncate font-semibold text-ink">{poll.title}</span>
           <span className="block text-xs text-ink-muted">
             {poll.productIds.length} products ·{" "}
-            {sentTo.length ? `sent to ${sentTo.length} contacts` : "shared by link"} · created {formatDate(poll.createdAt)}
+            {poll.channel === "email" ? `emailed to ${sentTo.length} contacts` : "shared by link"} · created{" "}
+            {formatDate(poll.createdAt)}
           </span>
         </span>
         <span className="hidden text-right sm:block">

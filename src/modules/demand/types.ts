@@ -1,15 +1,27 @@
 export type DemandProduct = {
   id: string;
   name: string;
-  genetics: "Indica" | "Sativa" | "Hybrid";
   thc: number;
+  /** total stock available, in kg */
+  stockKg: number;
+  /** ISO date (YYYY-MM-DD) */
+  expiry: string;
   pricePerGram: number;
 };
 
 export type DemandContact = {
   id: string;
   name: string;
+  company: string;
+  email: string;
   city: string;
+};
+
+export type DemandGroup = {
+  id: string;
+  name: string;
+  /** a contact may sit in several groups */
+  memberIds: string[];
 };
 
 export type DemandResponse = {
@@ -22,12 +34,15 @@ export type DemandResponse = {
   submittedAt: number;
 };
 
+export type DemandChannel = "email" | "link";
+
 export type DemandPoll = {
   id: string;
   title: string;
   productIds: string[];
-  /** contacts it was "sent" to — empty when shared by link only */
+  /** contacts it went to — empty when shared by link only */
   recipientIds: string[];
+  channel: DemandChannel;
   createdAt: number;
   expiresAt: number;
   responses: DemandResponse[];

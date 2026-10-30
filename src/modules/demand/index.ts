@@ -5,4 +5,4 @@
  */
 export { DemandPage } from "./components/DemandPage";
 export { PollLanding } from "./components/PollLanding";
-export type { DemandPoll, DemandProduct, DemandContact, DemandResponse } from "./types";
+export type { DemandPoll, DemandProduct, DemandContact, DemandGroup, DemandResponse } from "./types";

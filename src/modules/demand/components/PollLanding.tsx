@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Minus, Plus } from "lucide-react";
 import { Wordmark } from "@/shared/ui/Wordmark";
-import { productById } from "../data";
+import { productById, productLine } from "../data";
 import { addResponse, decodeShared, usePolls } from "../store";
 import type { SharedPoll } from "../types";
 
@@ -68,7 +68,7 @@ export function PollLanding({ pollId, encoded }: { pollId: string; encoded: stri
     setDone(true);
   }
 
-  const closes = new Date(poll.expiresAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const closes = new Date(poll.expiresAt).toLocaleDateString("en-GB");
 
   return (
     <div className="min-h-full px-4 py-8">
@@ -95,11 +95,7 @@ export function PollLanding({ pollId, encoded }: { pollId: string; encoded: stri
               <li key={id} className="flex items-center gap-3 px-3 py-3">
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold text-ink">{p?.name ?? id}</span>
-                  {p && (
-                    <span className="block text-[11px] text-ink-muted">
-                      {p.genetics} · THC {p.thc}% · €{p.pricePerGram.toFixed(2)}/g
-                    </span>
-                  )}
+                  {p && <span className="block text-[11px] text-ink-muted">{productLine(p)}</span>}
                 </span>
                 <div className="flex items-center gap-1">
                   <StepBtn label="Less" onClick={() => set(id, g - STEP)} disabled={g === 0}>
