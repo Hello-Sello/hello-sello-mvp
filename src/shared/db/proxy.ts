@@ -57,6 +57,7 @@ export async function updateSession(request: NextRequest) {
     path === '/agb' ||           // legal — AGB
     path === '/sella' ||         // design preview — static dummy dashboard, no auth/backend
     path.startsWith('/c/') ||
+    path.startsWith('/poll/') || // Demand demo — temporary public poll page (mock data, browser-local)
     path === '/auth/callback' ||
     path === '/auth/confirm' ||
     path === '/verify-email' ||
