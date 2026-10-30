@@ -74,5 +74,6 @@ export function initials(name: string) {
     .split(/[\s-]+/)
     .slice(0, 2)
     .map((w) => w[0])
-    .join("");
+    .join("")
+    .toUpperCase();
 }

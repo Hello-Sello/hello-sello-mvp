@@ -1,4 +1,4 @@
-import type { DemandContact, DemandGroup, DemandPoll, DemandProduct } from "./types";
+import type { DemandContact, DemandGroup, DemandProduct } from "./types";
 
 /**
  * Demo data for the Demand poll preview. Nothing here touches Supabase — the
@@ -46,63 +46,6 @@ export const DEMO_GROUPS: DemandGroup[] = [
 export const DEFAULT_FAVORITES = ["g-key", "c-1", "c-3"];
 
 const DAY = 24 * 60 * 60 * 1000;
-
-/** Two finished-looking polls so the Polls section isn't empty on first load. */
-export function seedPolls(now: number): DemandPoll[] {
-  return [
-    {
-      id: "demo-q4",
-      title: "Q4 restock — what do you need?",
-      productIds: ["flower-3", "flower-12", "flower-27", "flower-41"],
-      recipientIds: ["c-1", "c-2", "c-3", "c-4"],
-      channel: "email",
-      createdAt: now - 6 * DAY,
-      expiresAt: now + 8 * DAY,
-      responses: [
-        {
-          id: "r-1",
-          name: "Julia Brandt",
-          company: "Apotheke am Markt",
-          quantities: { "flower-3": 500, "flower-12": 250, "flower-41": 100 },
-          submittedAt: now - 5 * DAY,
-        },
-        {
-          id: "r-2",
-          name: "Tobias Kern",
-          company: "Linden-Apotheke",
-          quantities: { "flower-3": 250, "flower-27": 500 },
-          note: "Need delivery before 15 Dec.",
-          submittedAt: now - 4 * DAY,
-        },
-        {
-          id: "r-3",
-          name: "Aylin Demir",
-          company: "Stern Apotheke",
-          quantities: { "flower-12": 1000, "flower-27": 250, "flower-41": 250 },
-          submittedAt: now - 2 * DAY,
-        },
-      ],
-    },
-    {
-      id: "demo-new-line",
-      title: "Interest check: new 28% line",
-      productIds: ["flower-50", "flower-53", "flower-56"],
-      recipientIds: [],
-      channel: "link",
-      createdAt: now - 2 * DAY,
-      expiresAt: now + 12 * DAY,
-      responses: [
-        {
-          id: "r-4",
-          name: "Markus Vogel",
-          company: "Kranich Apotheke",
-          quantities: { "flower-50": 250, "flower-56": 100 },
-          submittedAt: now - 1 * DAY,
-        },
-      ],
-    },
-  ];
-}
 
 export const POLL_LIFETIME_DAYS = 14;
 export const POLL_LIFETIME_MS = POLL_LIFETIME_DAYS * DAY;

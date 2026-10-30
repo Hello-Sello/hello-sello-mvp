@@ -24,13 +24,15 @@ export type DemandGroup = {
   memberIds: string[];
 };
 
+/** One pharmacy's row in the group poll. */
 export type DemandResponse = {
   id: string;
+  /** set when the row belongs to an invited contact; absent for link walk-ins */
+  contactId?: string;
   name: string;
   company: string;
   /** grams wanted, keyed by product id; products left at 0 are omitted */
   quantities: Record<string, number>;
-  note?: string;
   submittedAt: number;
 };
 
@@ -40,7 +42,7 @@ export type DemandPoll = {
   id: string;
   title: string;
   productIds: string[];
-  /** contacts it went to — empty when shared by link only */
+  /** invited contacts — each gets a named row in the grid */
   recipientIds: string[];
   channel: DemandChannel;
   createdAt: number;
@@ -48,5 +50,5 @@ export type DemandPoll = {
   responses: DemandResponse[];
 };
 
-/** What the public link carries, so the landing page renders on any device. */
-export type SharedPoll = Pick<DemandPoll, "id" | "title" | "productIds" | "expiresAt">;
+/** What the public link carries, so the poll page renders on any device. */
+export type SharedPoll = Pick<DemandPoll, "id" | "title" | "productIds" | "recipientIds" | "expiresAt">;

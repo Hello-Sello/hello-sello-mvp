@@ -1,17 +1,18 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { DEFAULT_FAVORITES, DEMO_GROUPS, POLL_LIFETIME_MS, seedPolls } from "./data";
+import { DEFAULT_FAVORITES, DEMO_GROUPS, POLL_LIFETIME_MS } from "./data";
 import type { DemandChannel, DemandGroup, DemandPoll, DemandResponse, SharedPoll } from "./types";
 
 /**
  * Browser-local stores for the Demand demo: polls, favorites and groups all
- * live in localStorage only — there is no table behind this yet. A response
- * shows up in the creator's results only when it is submitted in the same
- * browser (fine for a live demo; a real build needs `demand_*` tables).
+ * live in localStorage only — there is no table behind this yet. Every open
+ * tab of the same browser updates live (the `storage` event), which is what
+ * makes the group grid "live" in a demo. Other devices do NOT see each other's
+ * rows until polls move to a real table.
  *
- * The poll definition also travels in the share link (`?d=…`), so the landing
- * page itself renders on any device even though its answers stay local.
+ * The poll definition (incl. the invited pharmacies) travels in the link
+ * (`?d=…`), so the poll page renders on any device.
  */
 function localStore<T>(key: string, seed: () => T, serverValue: T) {
   const listeners = new Set<() => void>();
@@ -62,7 +63,8 @@ function localStore<T>(key: string, seed: () => T, serverValue: T) {
 const NO_POLLS: DemandPoll[] = [];
 const NO_IDS: string[] = [];
 
-const polls = localStore<DemandPoll[]>("hs:demand-polls:v2", () => seedPolls(Date.now()), NO_POLLS);
+// v3: starts empty — the old example polls (v1/v2 keys) are simply never read again
+const polls = localStore<DemandPoll[]>("hs:demand-polls:v3", () => [], NO_POLLS);
 const favorites = localStore<string[]>("hs:demand-favorites:v1", () => DEFAULT_FAVORITES, NO_IDS);
 const groups = localStore<DemandGroup[]>("hs:demand-groups:v1", () => DEMO_GROUPS, DEMO_GROUPS);
 
@@ -92,18 +94,30 @@ export function deletePoll(id: string) {
   polls.write(polls.read().filter((p) => p.id !== id));
 }
 
-export function addResponse(shared: SharedPoll, response: Omit<DemandResponse, "id" | "submittedAt">) {
-  const entry: DemandResponse = { ...response, id: uid("r"), submittedAt: Date.now() };
+/**
+ * Save one pharmacy's row. An invited contact (or an earlier walk-in, by
+ * response id) overwrites its own row instead of adding a second one.
+ * Returns the saved row's id.
+ */
+export function saveResponse(
+  shared: SharedPoll,
+  row: Omit<DemandResponse, "id" | "submittedAt"> & { id?: string },
+): string {
+  const entry: DemandResponse = { ...row, id: row.id ?? uid("r"), submittedAt: Date.now() };
+  const same = (r: DemandResponse) =>
+    r.id === entry.id || (entry.contactId !== undefined && r.contactId === entry.contactId);
   const all = polls.read();
-  if (all.some((p) => p.id === shared.id)) {
-    polls.write(all.map((p) => (p.id === shared.id ? { ...p, responses: [...p.responses, entry] } : p)));
+  const existing = all.find((p) => p.id === shared.id);
+  if (existing) {
+    const responses = existing.responses.some(same)
+      ? existing.responses.map((r) => (same(r) ? entry : r))
+      : [...existing.responses, entry];
+    polls.write(all.map((p) => (p.id === shared.id ? { ...p, responses } : p)));
   } else {
-    // opened from a link on another browser — keep the answer with a local copy
-    polls.write([
-      { ...shared, recipientIds: [], channel: "link", createdAt: Date.now(), responses: [entry] },
-      ...all,
-    ]);
+    // opened from a link in another browser — keep the row with a local copy
+    polls.write([{ ...shared, channel: "link", createdAt: Date.now(), responses: [entry] }, ...all]);
   }
+  return entry.id;
 }
 
 /* ---- favorites + groups -------------------------------------------------- */
@@ -122,8 +136,10 @@ export function createGroup(name: string, memberIds: string[]): DemandGroup {
 
 /* ---- share link encoding ------------------------------------------------- */
 
+const num = (id: string) => id.replace(/^(flower|c)-/, "");
+
 export function encodeShared(poll: SharedPoll): string {
-  const json = JSON.stringify([poll.title, poll.productIds.map((id) => id.replace("flower-", "")), poll.expiresAt]);
+  const json = JSON.stringify([poll.title, poll.productIds.map(num), poll.expiresAt, poll.recipientIds.map(num)]);
   return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -131,13 +147,25 @@ export function decodeShared(id: string, d: string | null): SharedPoll | null {
   if (!d) return null;
   try {
     const b64 = d.replace(/-/g, "+").replace(/_/g, "/");
-    const [title, nums, expiresAt] = JSON.parse(decodeURIComponent(escape(atob(b64)))) as [string, string[], number];
-    return { id, title, productIds: nums.map((n) => `flower-${n}`), expiresAt };
+    const [title, products, expiresAt, recipients = []] = JSON.parse(decodeURIComponent(escape(atob(b64)))) as [
+      string,
+      string[],
+      number,
+      string[]?,
+    ];
+    return {
+      id,
+      title,
+      productIds: products.map((n) => `flower-${n}`),
+      recipientIds: recipients.map((n) => `c-${n}`),
+      expiresAt,
+    };
   } catch {
     return null;
   }
 }
 
-export function shareUrl(origin: string, poll: SharedPoll): string {
-  return `${origin}/poll/${poll.id}?d=${encodeShared(poll)}`;
+/** The group link; with `me` it is that pharmacy's personal link (their row is pre-selected). */
+export function shareUrl(origin: string, poll: SharedPoll, me?: string): string {
+  return `${origin}/poll/${poll.id}?d=${encodeShared(poll)}${me ? `&me=${num(me)}` : ""}`;
 }
